@@ -133,6 +133,24 @@ func IndexFunc[S ~[]T, T any](s S, f func(T) bool) int {
 	return -1
 }
 
+func IndexLast[S ~[]T, T comparable](s S, v T) int {
+	return IndexLastFunc(s, func(item T) bool { return item == v })
+}
+
+func IndexLastEq[S ~[]T, T constraints.Equal[T]](s S, v T) int {
+	return IndexLastFunc(s, func(i T) bool { return i.Eq(v) })
+}
+
+func IndexLastFunc[S ~[]T, T any](s S, f func(T) bool) int {
+	for i := len(s) - 1; i >= 0; i-- {
+		if f(s[i]) {
+			return i
+		}
+	}
+
+	return -1
+}
+
 // Contains reports whether v is present in s.
 func Contains[S ~[]T, T comparable](s S, v T) bool             { return Index(s, v) >= 0 }
 func ContainsEq[S ~[]T, T constraints.Equal[T]](s S, v T) bool { return IndexEq(s, v) >= 0 }
@@ -315,4 +333,14 @@ func Filter[S ~[]T, T any](s S, f func(T) bool) S {
 	}
 
 	return Clip(s[:i])
+}
+
+func Reverse[S ~[]T, T any](s S) S {
+	for i := 0; i < len(s)/2; i++ {
+		j := len(s) - i - 1
+
+		s[i], s[j] = s[j], s[i]
+	}
+
+	return s
 }
