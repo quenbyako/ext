@@ -265,7 +265,15 @@ func Grow[S ~[]E, E any](s S, n int) S {
 // Clip removes unused capacity from the slice, returning s[:len(s):len(s)].
 func Clip[S ~[]E, E any](s S) S { return s[:len(s):len(s)] }
 
-func Remap[S ~[]T, T, U any](s S, f func(int, T) U) []U {
+func Remap[S ~[]T, T, U any](s S, f func(T) U) []U {
+	res := make([]U, len(s))
+	for i, item := range s {
+		res[i] = f(item)
+	}
+	return res
+}
+
+func RemapIndex[S ~[]T, T, U any](s S, f func(int, T) U) []U {
 	res := make([]U, len(s))
 	for i, item := range s {
 		res[i] = f(i, item)

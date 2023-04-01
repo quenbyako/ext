@@ -2,8 +2,6 @@ package set
 
 import (
 	"sync"
-
-	"golang.org/x/exp/maps"
 )
 
 // setm defines a thread safe set data structure.
@@ -158,7 +156,12 @@ func (s *setm[T]) List() []T {
 	s.RLock()
 	defer s.RUnlock()
 
-	return maps.Keys(s.m)
+	res := make([]T, 0, len(s.m))
+	for k := range s.m {
+		res = append(res, k)
+	}
+
+	return res
 }
 
 func (s *setm[T]) Copy() Set[T] {

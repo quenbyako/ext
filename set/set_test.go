@@ -6,11 +6,11 @@ import (
 )
 
 func Test_Union(t *testing.T) {
-	s := newTS()
+	s := newTS[string]()
 	s.Add("1", "2", "3")
-	r := newTS()
+	r := newTS[string]()
 	r.Add("3", "4", "5")
-	x := newNonTS()
+	x := newNonTS[string]()
 	x.Add("5", "6", "7")
 
 	u := Union(s, r, x)
@@ -36,11 +36,11 @@ func Test_Union(t *testing.T) {
 }
 
 func Test_Difference(t *testing.T) {
-	s := newTS()
+	s := newTS[string]()
 	s.Add("1", "2", "3")
-	r := newTS()
+	r := newTS[string]()
 	r.Add("3", "4", "5")
-	x := newNonTS()
+	x := newNonTS[string]()
 	x.Add("5", "6", "7")
 
 	u := Difference(s, r, x)
@@ -61,11 +61,11 @@ func Test_Difference(t *testing.T) {
 }
 
 func Test_Intersection(t *testing.T) {
-	s1 := newTS()
+	s1 := newTS[string]()
 	s1.Add("1", "3", "4", "5")
-	s2 := newTS()
+	s2 := newTS[string]()
 	s2.Add("3", "5", "6")
-	s3 := newTS()
+	s3 := newTS[string]()
 	s3.Add("4", "5", "6", "7")
 	u := Intersection(s1, s2, s3)
 
@@ -79,9 +79,9 @@ func Test_Intersection(t *testing.T) {
 }
 
 func Test_Intersection2(t *testing.T) {
-	s1 := newTS()
+	s1 := newTS[string]()
 	s1.Add("1", "3", "4", "5")
-	s2 := newTS()
+	s2 := newTS[string]()
 	s2.Add("5", "6")
 	i := Intersection(s1, s2)
 
@@ -95,9 +95,9 @@ func Test_Intersection2(t *testing.T) {
 }
 
 func Test_SymmetricDifference(t *testing.T) {
-	s := newTS()
+	s := newTS[string]()
 	s.Add("1", "2", "3")
-	r := newTS()
+	r := newTS[string]()
 	r.Add("3", "4", "5")
 	u := SymmetricDifference(s, r)
 
@@ -110,43 +110,9 @@ func Test_SymmetricDifference(t *testing.T) {
 	}
 }
 
-func Test_StringSlice(t *testing.T) {
-	s := newTS()
-	s.Add("san francisco", "istanbul", 3.14, 1321, "ankara")
-	u := StringSlice(s)
-
-	if len(u) != 3 {
-		t.Error("StringSlice: slice should only have three items")
-	}
-
-	for _, item := range u {
-		r := reflect.TypeOf(item)
-		if r.Kind().String() != "string" {
-			t.Error("StringSlice: slice item should be a string")
-		}
-	}
-}
-
-func Test_IntSlice(t *testing.T) {
-	s := newTS()
-	s.Add("san francisco", "istanbul", 3.14, 1321, "ankara", 8876)
-	u := IntSlice(s)
-
-	if len(u) != 2 {
-		t.Error("IntSlice: slice should only have two items")
-	}
-
-	for _, item := range u {
-		r := reflect.TypeOf(item)
-		if r.Kind().String() != "int" {
-			t.Error("Intslice: slice item should be a int")
-		}
-	}
-}
-
 func BenchmarkSetEquality(b *testing.B) {
-	s := newTS()
-	u := newTS()
+	s := newTS[int]()
+	u := newTS[int]()
 
 	for i := 0; i < b.N; i++ {
 		s.Add(i)
@@ -161,8 +127,8 @@ func BenchmarkSetEquality(b *testing.B) {
 }
 
 func BenchmarkSubset(b *testing.B) {
-	s := newTS()
-	u := newTS()
+	s := newTS[int]()
+	u := newTS[int]()
 
 	for i := 0; i < b.N; i++ {
 		s.Add(i)
@@ -177,8 +143,8 @@ func BenchmarkSubset(b *testing.B) {
 }
 
 func benchmarkIntersection(b *testing.B, numberOfItems int) {
-	s1 := newTS()
-	s2 := newTS()
+	s1 := newTS[int]()
+	s2 := newTS[int]()
 
 	for i := 0; i < numberOfItems/2; i++ {
 		s1.Add(i)
