@@ -14,7 +14,7 @@ func mushHash(item Hashable) uint64 {
 
 type setAny[T Hashable] map[uint64]T
 
-func newAnyNonTS[T Hashable](items ...T) Set[T] { return make(setAny[T]).Add(items...) }
+func newAnyNonTS[T Hashable](items ...T) Set[T] { return make(setAny[T], len(items)).Add(items...) }
 
 // Add includes the specified items (one or more) to the set. The underlying
 // Set s is modified. If passed nothing it silently returns.

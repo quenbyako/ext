@@ -50,7 +50,7 @@ type null = struct{}
 func New[T comparable](items ...T) Set[T]       { return newTS(items...) }
 func NewNonTS[T comparable](items ...T) Set[T]  { return newNonTS(items...) }
 func NewAny[T Hashable](items ...T) Set[T]      { panic("unimplemented") }
-func NewAnyNonTS[T Hashable](items ...T) Set[T] { return newAnyNonTS[T](items...) }
+func NewAnyNonTS[T Hashable](items ...T) Set[T] { return newAnyNonTS(items...) }
 
 // Union is the merger of multiple sets. It returns a new set with all the
 // elements present in all the sets that are passed.
