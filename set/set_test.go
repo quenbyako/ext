@@ -6,15 +6,15 @@ import (
 )
 
 func Test_Union(t *testing.T) {
-	s := newTS[string]()
+	s := wrapMutex(newNonTS[string]())
 	s.Add("1", "2", "3")
-	r := newTS[string]()
+	r := wrapMutex(newNonTS[string]())
 	r.Add("3", "4", "5")
 	x := newNonTS[string]()
 	x.Add("5", "6", "7")
 
 	u := Union(s, r, x)
-	if settype := reflect.TypeOf(u).String(); settype != "*set.Set" {
+	if settype := reflect.TypeOf(u).String(); settype != "*set.setm[string]" {
 		t.Error("Union should derive its set type from the first passed set, got", settype)
 	}
 	if u.Size() != 7 {
@@ -29,16 +29,16 @@ func Test_Union(t *testing.T) {
 	if z.Size() != 5 {
 		t.Error("Union: Union of 2 sets doesn't have the proper number of items.")
 	}
-	if settype := reflect.TypeOf(z).String(); settype != "*set.SetNonTS" {
+	if settype := reflect.TypeOf(z).String(); settype != "*set.set[string]" {
 		t.Error("Union should derive its set type from the first passed set, got", settype)
 	}
 
 }
 
 func Test_Difference(t *testing.T) {
-	s := newTS[string]()
+	s := wrapMutex(newNonTS[string]())
 	s.Add("1", "2", "3")
-	r := newTS[string]()
+	r := wrapMutex(newNonTS[string]())
 	r.Add("3", "4", "5")
 	x := newNonTS[string]()
 	x.Add("5", "6", "7")
@@ -61,11 +61,11 @@ func Test_Difference(t *testing.T) {
 }
 
 func Test_Intersection(t *testing.T) {
-	s1 := newTS[string]()
+	s1 := wrapMutex(newNonTS[string]())
 	s1.Add("1", "3", "4", "5")
-	s2 := newTS[string]()
+	s2 := wrapMutex(newNonTS[string]())
 	s2.Add("3", "5", "6")
-	s3 := newTS[string]()
+	s3 := wrapMutex(newNonTS[string]())
 	s3.Add("4", "5", "6", "7")
 	u := Intersection(s1, s2, s3)
 
@@ -79,9 +79,9 @@ func Test_Intersection(t *testing.T) {
 }
 
 func Test_Intersection2(t *testing.T) {
-	s1 := newTS[string]()
+	s1 := wrapMutex(newNonTS[string]())
 	s1.Add("1", "3", "4", "5")
-	s2 := newTS[string]()
+	s2 := wrapMutex(newNonTS[string]())
 	s2.Add("5", "6")
 	i := Intersection(s1, s2)
 
@@ -95,9 +95,9 @@ func Test_Intersection2(t *testing.T) {
 }
 
 func Test_SymmetricDifference(t *testing.T) {
-	s := newTS[string]()
+	s := wrapMutex(newNonTS[string]())
 	s.Add("1", "2", "3")
-	r := newTS[string]()
+	r := wrapMutex(newNonTS[string]())
 	r.Add("3", "4", "5")
 	u := SymmetricDifference(s, r)
 
@@ -111,8 +111,8 @@ func Test_SymmetricDifference(t *testing.T) {
 }
 
 func BenchmarkSetEquality(b *testing.B) {
-	s := newTS[int]()
-	u := newTS[int]()
+	s := wrapMutex(newNonTS[int]())
+	u := wrapMutex(newNonTS[int]())
 
 	for i := 0; i < b.N; i++ {
 		s.Add(i)
@@ -127,8 +127,8 @@ func BenchmarkSetEquality(b *testing.B) {
 }
 
 func BenchmarkSubset(b *testing.B) {
-	s := newTS[int]()
-	u := newTS[int]()
+	s := wrapMutex(newNonTS[int]())
+	u := wrapMutex(newNonTS[int]())
 
 	for i := 0; i < b.N; i++ {
 		s.Add(i)
@@ -143,8 +143,8 @@ func BenchmarkSubset(b *testing.B) {
 }
 
 func benchmarkIntersection(b *testing.B, numberOfItems int) {
-	s1 := newTS[int]()
-	s2 := newTS[int]()
+	s1 := wrapMutex(newNonTS[int]())
+	s2 := wrapMutex(newNonTS[int]())
 
 	for i := 0; i < numberOfItems/2; i++ {
 		s1.Add(i)

@@ -7,18 +7,18 @@ import (
 )
 
 func Test_New(t *testing.T) {
-	s := New(ThreadSafe)
-	s.Add(1, 2, 3, "testing")
+	s := wrapMutex(newNonTS[string]())
+	s.Add("1", "2", "3", "testing")
 	if s.Size() != 4 {
 		t.Error("New: The set created was expected have 4 items")
 	}
 }
 
 func TestSetNonTS_Add(t *testing.T) {
-	s := New(NonThreadSafe)
-	s.Add(1)
-	s.Add(2)
-	s.Add(2) // duplicate
+	s := newNonTS[string]()
+	s.Add("1")
+	s.Add("2")
+	s.Add("2") // duplicate
 	s.Add("fatih")
 	s.Add("zeynep")
 	s.Add("zeynep") // another duplicate
@@ -27,29 +27,29 @@ func TestSetNonTS_Add(t *testing.T) {
 		t.Error("Add: items are not unique. The set size should be four")
 	}
 
-	if !s.Has(1, 2, "fatih", "zeynep") {
+	if !s.Has("1", "2", "fatih", "zeynep") {
 		t.Error("Add: added items are not availabile in the set.")
 	}
 }
 
 func TestSetNonTS_Add_multiple(t *testing.T) {
-	s := newNonTS()
-	s.Add("ankara", "san francisco", 3.14)
+	s := newNonTS[string]()
+	s.Add("ankara", "san francisco", "3.14")
 
 	if s.Size() != 3 {
 		t.Error("Add: items are not unique. The set size should be three")
 	}
 
-	if !s.Has("ankara", "san francisco", 3.14) {
+	if !s.Has("ankara", "san francisco", "3.14") {
 		t.Error("Add: added items are not availabile in the set.")
 	}
 }
 
 func TestSetNonTS_Remove(t *testing.T) {
-	s := newNonTS()
+	s := newNonTS[int]()
 	s.Add(1)
 	s.Add(2)
-	s.Add("fatih")
+	s.Add(3)
 
 	s.Remove(1)
 	if s.Size() != 2 {
@@ -62,18 +62,18 @@ func TestSetNonTS_Remove(t *testing.T) {
 	}
 
 	s.Remove(2)
-	s.Remove("fatih")
+	s.Remove(3)
 	if s.Size() != 0 {
 		t.Error("Remove: set size should be zero")
 	}
 
-	s.Remove("fatih") // try to remove something from a zero length set
+	s.Remove(3) // try to remove something from a zero length set
 }
 
 func TestSetNonTS_Remove_multiple(t *testing.T) {
-	s := newNonTS()
-	s.Add("ankara", "san francisco", 3.14, "istanbul")
-	s.Remove("ankara", "san francisco", 3.14)
+	s := newNonTS[string]()
+	s.Add("ankara", "san francisco", "3.14", "istanbul")
+	s.Remove("ankara", "san francisco", "3.14")
 
 	if s.Size() != 1 {
 		t.Error("Remove: items are not unique. The set size should be four")
@@ -85,12 +85,15 @@ func TestSetNonTS_Remove_multiple(t *testing.T) {
 }
 
 func TestSetNonTS_Pop(t *testing.T) {
-	s := newNonTS()
+	s := newNonTS[int]()
 	s.Add(1)
 	s.Add(2)
-	s.Add("fatih")
+	s.Add(3)
 
-	a := s.Pop()
+	a, ok := s.Pop()
+	if !ok {
+		t.Error("Pop: expected to get value")
+	}
 	if s.Size() != 2 {
 		t.Error("Pop: set size should be two after popping out")
 	}
@@ -101,16 +104,16 @@ func TestSetNonTS_Pop(t *testing.T) {
 
 	s.Pop()
 	s.Pop()
-	b := s.Pop()
-	if b != nil {
-		t.Error("Pop: should return nil because set is empty")
+
+	if _, ok := s.Pop(); ok {
+		t.Error("Pop: expected to not get value")
 	}
 
 	s.Pop() // try to remove something from a zero length set
 }
 
 func TestSetNonTS_Has(t *testing.T) {
-	s := newNonTS()
+	s := newNonTS[string]()
 	s.Add("1", "2", "3", "4")
 
 	if !s.Has("1") {
@@ -123,8 +126,8 @@ func TestSetNonTS_Has(t *testing.T) {
 }
 
 func TestSetNonTS_Clear(t *testing.T) {
-	s := newNonTS()
-	s.Add(1)
+	s := newNonTS[string]()
+	s.Add("1")
 	s.Add("istanbul")
 	s.Add("san francisco")
 
@@ -135,7 +138,7 @@ func TestSetNonTS_Clear(t *testing.T) {
 }
 
 func TestSetNonTS_IsEmpty(t *testing.T) {
-	s := newNonTS()
+	s := newNonTS[int]()
 
 	empty := s.IsEmpty()
 	if !empty {
@@ -152,9 +155,9 @@ func TestSetNonTS_IsEmpty(t *testing.T) {
 }
 
 func TestSetNonTS_IsEqual(t *testing.T) {
-	s := newNonTS()
+	s := newNonTS[string]()
 	s.Add("1", "2", "3")
-	u := newNonTS()
+	u := newNonTS[string]()
 	u.Add("1", "2", "3")
 
 	ok := s.IsEqual(u)
@@ -163,9 +166,9 @@ func TestSetNonTS_IsEqual(t *testing.T) {
 	}
 
 	// same size, different content
-	a := newNonTS()
+	a := newNonTS[string]()
 	a.Add("1", "2", "3")
-	b := newNonTS()
+	b := newNonTS[string]()
 	b.Add("4", "5", "6")
 
 	ok = a.IsEqual(b)
@@ -174,9 +177,9 @@ func TestSetNonTS_IsEqual(t *testing.T) {
 	}
 
 	// different size, similar content
-	a = newNonTS()
+	a = newNonTS[string]()
 	a.Add("1", "2", "3")
-	b = newNonTS()
+	b = newNonTS[string]()
 	b.Add("1", "2", "3", "4")
 
 	ok = a.IsEqual(b)
@@ -186,9 +189,9 @@ func TestSetNonTS_IsEqual(t *testing.T) {
 }
 
 func TestSetNonTS_IsSubset(t *testing.T) {
-	s := newNonTS()
+	s := newNonTS[string]()
 	s.Add("1", "2", "3", "4")
-	u := newNonTS()
+	u := newNonTS[string]()
 	u.Add("1", "2", "3")
 
 	ok := s.IsSubset(u)
@@ -204,9 +207,9 @@ func TestSetNonTS_IsSubset(t *testing.T) {
 }
 
 func TestSetNonTS_IsSuperset(t *testing.T) {
-	s := newNonTS()
+	s := newNonTS[string]()
 	s.Add("1", "2", "3", "4")
-	u := newNonTS()
+	u := newNonTS[string]()
 	u.Add("1", "2", "3")
 
 	ok := u.IsSuperset(s)
@@ -222,14 +225,14 @@ func TestSetNonTS_IsSuperset(t *testing.T) {
 }
 
 func TestSetNonTS_String(t *testing.T) {
-	s := newNonTS()
-	if s.String() != "[]" {
+	s := newNonTS[string]()
+	if s.String() != "set[]" {
 		t.Errorf("String: output is not what is excepted '%s'", s.String())
 	}
 
 	s.Add("1", "2", "3", "4")
 
-	if !strings.HasPrefix(s.String(), "[") {
+	if !strings.HasPrefix(s.String(), "set[") {
 		t.Error("String: output should begin with a square bracket")
 	}
 
@@ -239,9 +242,9 @@ func TestSetNonTS_String(t *testing.T) {
 }
 
 func TestSetNonTS_List(t *testing.T) {
-	s := newNonTS()
+	s := newNonTS[string]()
 	s.Add("1", "2", "3", "4")
-	s = newNonTS()
+	s = newNonTS[string]()
 	s.Add("1", "2", "3", "4")
 
 	// this returns a slice of interface{}
@@ -258,7 +261,7 @@ func TestSetNonTS_List(t *testing.T) {
 }
 
 func TestSetNonTS_Copy(t *testing.T) {
-	s := newNonTS()
+	s := newNonTS[string]()
 	s.Add("1", "2", "3", "4")
 	r := s.Copy()
 
@@ -268,9 +271,9 @@ func TestSetNonTS_Copy(t *testing.T) {
 }
 
 func TestSetNonTS_Merge(t *testing.T) {
-	s := newNonTS()
+	s := newNonTS[string]()
 	s.Add("1", "2", "3")
-	r := newNonTS()
+	r := newNonTS[string]()
 	r.Add("3", "4", "5")
 	s.Merge(r)
 
@@ -284,9 +287,9 @@ func TestSetNonTS_Merge(t *testing.T) {
 }
 
 func TestSetNonTS_Separate(t *testing.T) {
-	s := newNonTS()
+	s := newNonTS[string]()
 	s.Add("1", "2", "3")
-	r := newNonTS()
+	r := newNonTS[string]()
 	r.Add("3", "5")
 	s.Separate(r)
 

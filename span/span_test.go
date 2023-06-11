@@ -2,7 +2,6 @@ package span_test
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 	"unicode"
 
@@ -65,7 +64,7 @@ func TestMerge(t *testing.T) {
 		{s(b('a', 'c')), s(b('d', 'f'), b('g', 'i')), s(b('a', 'c'), b('d', 'f'), b('g', 'i'))},
 		{s(b('A', 'J'), b('a', 'j'), b('l', 'r')), s(r('L')), s(b('A', 'J'), b('L', 'L'), b('a', 'j'), b('l', 'r'))},
 	} {
-		t.Run("", compare(tt.want, tt.a.Merge(tt.b)))
+		t.Run("", compareSpan(tt.want, tt.a.Merge(tt.b)))
 	}
 }
 
@@ -80,8 +79,14 @@ func TestFold(t *testing.T) {
 		{s(b('a', 'j'), b('l', 'r'), b('t', 'z')), s(b('A', 'J'), b('L', 'R'), b('T', 'Z'), b('a', 'j'), b('l', 'r'), b('t', 'z'))},
 		{s(b('0', '9'), b('a', 'z')), s(b('0', '9'), b('A', 'Z'), b('a', 'z'))},
 	} {
-		t.Run("", compare(tt.want, fold(tt.in)))
+		t.Run("", compareSpan(tt.want, fold(tt.in)))
 	}
+}
+
+func TestReverse(t *testing.T) {
+	want := s(b('A', 'Z'), b('a', 'z'))
+	got := s(b('a', 'z'), b('A', 'Z'))
+	t.Run("", compareSpan(want, got))
 }
 
 func fold(r Span[rune]) Span[rune] {
@@ -104,9 +109,20 @@ func folded(lo, hi rune) (_, _ rune) {
 	return lof, hif
 }
 
-func compare(want, got any) func(*testing.T) {
+func compareSpan[T comparable](want, got Span[T]) func(*testing.T) {
 	return func(t *testing.T) {
-		if !reflect.DeepEqual(want, got) {
+		if !IsEqual(want, got) {
+			t.Log(fmt.Sprintf("Not equal: \n"+
+				"expected: %v\n"+
+				"actual  : %v", want, got))
+			t.FailNow()
+		}
+	}
+}
+
+func compare[T comparable](want, got T) func(*testing.T) {
+	return func(t *testing.T) {
+		if want != got {
 			t.Log(fmt.Sprintf("Not equal: \n"+
 				"expected: %v\n"+
 				"actual  : %v", want, got))
