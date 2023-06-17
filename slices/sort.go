@@ -86,7 +86,7 @@ func BinarySearch[E constraints.Ordered](x []E, target E) (int, bool) {
 // defined by cmp. cmp(a, b) is expected to return an integer comparing the two
 // parameters: 0 if a == b, a negative number if a < b and a positive number if
 // a > b.
-func BinarySearchFunc[S ~[]E, E, T any](x S, target T, cmp func(E, T) int) (int, bool) {
+func BinarySearchFunc[S ~[]E, E, T any](x S, target T, cmp func(_ E, target T) int) (int, bool) {
 	pos := search(len(x), func(i int) bool { return cmp(x[i], target) >= 0 })
 	if pos >= len(x) || cmp(x[pos], target) != 0 {
 		return pos, false

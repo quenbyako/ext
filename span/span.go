@@ -81,9 +81,9 @@ type Bound[T any] interface {
 
 func NewBound[T constraints.Ordered](lo, hi T) Bound[T] {
 	if lo > hi {
-		return nil
+		panic("lo is higher than hi")
 	}
-	return bound[T]{lo: lo, hi: hi}
+	return bound[T]{lo: lo, loIncluded: true, hi: hi, hiIncluded: true}
 }
 
 func ToBasic[T any](s Span[T]) [][2]T {
@@ -303,10 +303,15 @@ const (
 
 func (s *span[T]) String() string { return joinStringer(s.bounds, "") }
 
-type bound[T constraints.Ordered] struct{ lo, hi T }
+type bound[T constraints.Ordered] struct {
+	loIncluded, hiIncluded bool
+	lo, hi                 T
+}
 
 func (x bound[T]) Lo() T                    { return x.lo }
+func (x bound[T]) LoBetter() (T, bool)      { return x.lo, x.loIncluded }
 func (x bound[T]) Hi() T                    { return x.hi }
+func (x bound[T]) HiBetter() (T, bool)      { return x.hi, x.hiIncluded }
 func (x bound[T]) Contains(y Bound[T]) bool { return x.lo >= y.Lo() && y.Hi() <= x.hi }
 func (x bound[T]) Overlaps(y Bound[T]) bool { return !(x.lo > y.Hi() || x.hi < y.Lo()) }
 func (x bound[T]) In(i T) bool              { return x.lo <= i && i <= x.hi }

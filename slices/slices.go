@@ -352,3 +352,35 @@ func Reverse[S ~[]T, T any](s S) S {
 
 	return s
 }
+
+// AddSorted inserts items into sorted slice. This could be useful for partly
+// ordered sets, but, if you need real set, use this type from other package.
+func AddSorted[S ~[]T, T constraints.Ordered](s S, items ...T) S {
+	return AddSortedFunc(s, constraints.Comparator[T], items...)
+}
+
+// AddSorted inserts items of any type into sorted slice. This could be useful
+// for partly ordered sets, but, if you need real set, use this type from other
+// package.
+func AddSortedFunc[S ~[]T, T any](s S, cmp func(elem, target T) int, items ...T) S {
+	if len(items) == 0 {
+		return s
+	} else if len(s) == 0 {
+		return SortFunc(items, func(a, b T) bool { return cmp(a, b) < 0 })
+	}
+
+	s = Grow(s, len(items))
+
+	for _, item := range items {
+		if cmp(item, s[0]) < 0 {
+			s = Insert(s, 0, item)
+		} else if cmp(item, s[len(s)-1]) > 0 {
+			s = append(s, item)
+		} else {
+			i, _ := BinarySearchFunc(s, item, cmp)
+			s = Insert(s, i, item)
+		}
+	}
+
+	return s
+}
