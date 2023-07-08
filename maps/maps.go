@@ -84,6 +84,12 @@ func DeleteFunc[M ~map[K]V, K comparable, V any](m M, del func(K, V) bool) M {
 	return m
 }
 
+// GetOne gets single random key and value from map. If length of map is zero, it
+// returns zero values and `ok` as false.
+//
+// Careful! "Random key and value" here DOES NOT mean, that it's
+// cryptographically random. Instead, it uses range random ordering from golang
+// runtime.
 func GetOne[M ~map[K]V, K comparable, V any](m M) (k K, v V, ok bool) {
 	for key, value := range m {
 		return key, value, true
@@ -92,10 +98,43 @@ func GetOne[M ~map[K]V, K comparable, V any](m M) (k K, v V, ok bool) {
 	return k, v, false
 }
 
+// Pop gets single random key and value from map and remove it, if at least one
+// key exists. If length of map is zero, it returns zero values and `ok` as
+// false.
+//
+// Careful! "Random key and value" here DOES NOT mean, that it's
+// cryptographically random. Instead, it uses range random ordering from golang
+// runtime.
 func Pop[M ~map[K]V, K comparable, V any](m M) (k K, v V, ok bool) {
 	k, v, ok = GetOne(m)
 	if ok {
 		delete(m, k)
 	}
 	return k, v, ok
+}
+
+// Merge merges map items into base map. If you want to create new map, you can
+// provide nil to base.
+func Merge[M ~map[K]V, K comparable, V any](base M, maps ...M) M {
+	if base == nil {
+		base = make(M)
+	}
+
+	for _, item := range maps {
+		for k, v := range item {
+			base[k] = v
+		}
+	}
+	return base
+}
+
+// Remap remaps map of one type to different one.
+func Remap[M1 ~map[K1]V1, K1, K2 comparable, V1, V2 any](m M1, f func(K1, V1) (K2, V2)) map[K2]V2 {
+	res := make(map[K2]V2, len(m))
+	for k1, v1 := range m {
+		k2, v2 := f(k1, v1)
+		res[k2] = v2
+	}
+
+	return res
 }
