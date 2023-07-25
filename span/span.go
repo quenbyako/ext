@@ -50,7 +50,7 @@ func New[T constraints.Ordered](bounds ...Bound[T]) Span[T] { return NewWithMerg
 // mean completely same span.
 func NewWithMerger[T constraints.Ordered](isSimilar func(previousEnd, nextStart T) bool, bounds ...Bound[T]) Span[T] {
 	if isSimilar == nil {
-		isSimilar = func(previousEnd, nextStart T) bool { return false }
+		isSimilar = isSimilarDefault[T]
 	}
 
 	var s Span[T] = &span[T]{
@@ -63,6 +63,9 @@ func NewWithMerger[T constraints.Ordered](isSimilar func(previousEnd, nextStart 
 
 	return s
 }
+
+// this function exists to make correct deep equal, if necessary.
+func isSimilarDefault[T constraints.Ordered](previousEnd, nextStart T) bool { return false }
 
 type Bound[T any] interface {
 	Lo() T
