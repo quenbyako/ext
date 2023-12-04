@@ -1,10 +1,6 @@
-// Copyright 2021 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// Package constraints defines a set of useful constraints to be used
+// Package cmp defines a set of useful constraints to be used
 // with type parameters.
-package constraints
+package cmp
 
 // Signed is a constraint that permits any signed integer type.
 // If future releases of Go add new predeclared signed integer types,
@@ -41,35 +37,3 @@ type Complex interface {
 	~complex64 | ~complex128
 }
 
-// Ordered is a constraint that permits any ordered type: any type
-// that supports the operators < <= >= >.
-// If future releases of Go add new ordered types,
-// this constraint will be modified to include them.
-type Ordered interface {
-	Integer | Float | ~string
-}
-
-type Equal[T any] interface{ Eq(T) bool }
-
-func Eq[T Equal[T]](a, b T) bool { return a.Eq(b) }
-
-type Compare[T any] interface{ Cmp(T) int }
-
-func Cmp[T Compare[T]](a, b T) int { return a.Cmp(b) }
-
-func Comparator[T Ordered](a, b T) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
-}
-
-func Equalizer[T any](c Compare[T]) Equal[T] { return theEqualizer[T]{c} }
-
-type theEqualizer[T any] struct{ Compare[T] }
-
-func (e theEqualizer[T]) Eq(t T) bool { return e.Cmp(t) == 0 }

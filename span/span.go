@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/quenbyako/ext/constraints"
+	"github.com/quenbyako/ext/cmp"
 	"github.com/quenbyako/ext/slices"
 )
 
-func Merge[T constraints.Ordered](s ...Span[T]) Span[T] {
+func Merge[T cmp.Ordered](s ...Span[T]) Span[T] {
 	if len(s) == 0 {
 		return New[T]()
 	}
@@ -42,13 +42,13 @@ type Span[T any] interface {
 	Bounds() []Bound[T]
 }
 
-func New[T constraints.Ordered](bounds ...Bound[T]) Span[T] { return NewWithMerger(nil, bounds...) }
+func New[T cmp.Ordered](bounds ...Bound[T]) Span[T] { return NewWithMerger(nil, bounds...) }
 
 // NewWithMerger is absolutely same constructor as New, but allows to add a
 // funtion, which checks, can we merge near bounds into single one. For example,
 // if you created integer span, you can merge [0:2][3:4] as [0:4], which will
 // mean completely same span.
-func NewWithMerger[T constraints.Ordered](isSimilar func(previousEnd, nextStart T) bool, bounds ...Bound[T]) Span[T] {
+func NewWithMerger[T cmp.Ordered](isSimilar func(previousEnd, nextStart T) bool, bounds ...Bound[T]) Span[T] {
 	if isSimilar == nil {
 		isSimilar = isSimilarDefault[T]
 	}
@@ -65,7 +65,7 @@ func NewWithMerger[T constraints.Ordered](isSimilar func(previousEnd, nextStart 
 }
 
 // this function exists to make correct deep equal, if necessary.
-func isSimilarDefault[T constraints.Ordered](previousEnd, nextStart T) bool { return false }
+func isSimilarDefault[T cmp.Ordered](previousEnd, nextStart T) bool { return false }
 
 type Bound[T any] interface {
 	Lo() T
@@ -82,7 +82,7 @@ type Bound[T any] interface {
 	fmt.Stringer
 }
 
-func NewBound[T constraints.Ordered](lo, hi T) Bound[T] {
+func NewBound[T cmp.Ordered](lo, hi T) Bound[T] {
 	if lo > hi {
 		panic("lo is higher than hi")
 	}
@@ -93,11 +93,11 @@ func ToBasic[T any](s Span[T]) [][2]T {
 	return slices.Remap(s.Bounds(), func(b Bound[T]) [2]T { return [2]T{b.Lo(), b.Hi()} })
 }
 
-func FromBasicOrdered[T constraints.Ordered](s [][2]T) Span[T] {
+func FromBasicOrdered[T cmp.Ordered](s [][2]T) Span[T] {
 	return New(slices.Remap(s, func(b [2]T) Bound[T] { return NewBound(b[0], b[1]) })...)
 }
 
-type span[T constraints.Ordered] struct {
+type span[T cmp.Ordered] struct {
 	isSimilar func(previousEnd, nextStart T) bool
 	bounds    []Bound[T]
 }
@@ -306,7 +306,7 @@ const (
 
 func (s *span[T]) String() string { return joinStringer(s.bounds, "") }
 
-type bound[T constraints.Ordered] struct {
+type bound[T cmp.Ordered] struct {
 	loIncluded, hiIncluded bool
 	lo, hi                 T
 }
@@ -362,7 +362,7 @@ func IsEqual[T comparable](a, b Span[T]) bool {
 
 func IsBoundEqual[T comparable](a, b Bound[T]) bool { return a.Lo() == b.Lo() && a.Hi() == b.Hi() }
 
-func min[T constraints.Ordered](i ...T) T {
+func min[T cmp.Ordered](i ...T) T {
 	var t T
 	for _, i := range i {
 		if i < t {
@@ -372,7 +372,7 @@ func min[T constraints.Ordered](i ...T) T {
 	return t
 }
 
-func max[T constraints.Ordered](i ...T) T {
+func max[T cmp.Ordered](i ...T) T {
 	var t T
 	for _, i := range i {
 		if i > t {
