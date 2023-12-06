@@ -89,4 +89,28 @@ func Float32() Fuzzer[float32] {
 	}
 }
 
+func Slice[T any](min, max int, f Fuzzer[T]) Fuzzer[[]T] {
+	return func(seed io.Reader) []T {
+		l := Uint64(uint64(min), uint64(max))(seed)
+		s := make([]T, l)
+		for i := range s {
+			s[i] = f(seed)
+		}
+
+		return s
+	}
+}
+
+func Map[K comparable, V any](min, max int, k Fuzzer[K], v Fuzzer[V]) Fuzzer[map[K]V] {
+	return func(seed io.Reader) map[K]V {
+		l := Uint64(uint64(min), uint64(max))(seed)
+		m := make(map[K]V, l)
+		for i := min; i < min+int(l); i++ {
+			m[k(seed)] = v(seed)
+		}
+
+		return m
+	}
+}
+
 func ptr[T any](v T) *T { return &v }
