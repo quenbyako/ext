@@ -6,6 +6,8 @@ import (
 	"io"
 	"math"
 	"math/big"
+
+	"github.com/quenbyako/ext/slices"
 )
 
 type Fuzzer[T any] func(seed io.Reader) T
@@ -86,6 +88,29 @@ func Float32() Fuzzer[float32] {
 		}
 
 		return 0
+	}
+}
+
+func Bytes(min, max uint64) Fuzzer[[]byte] {
+	return func(seed io.Reader) []byte {
+		l := Uint64(min, max)(seed)
+		ret := make([]byte, l)
+		seed.Read(ret)
+
+		return ret
+	}
+}
+
+func String(min, max uint64) Fuzzer[string] {
+	return func(seed io.Reader) string {
+		const letters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-"
+		const len = len(letters)
+		resultLen := Uint64(min, max)(seed)
+
+		return string(slices.Generate(int(resultLen), func(int) byte {
+			num, _ := rand.Int(seed, big.NewInt(int64(len)))
+			return letters[num.Int64()]
+		}))
 	}
 }
 
