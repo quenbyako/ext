@@ -68,7 +68,7 @@ func RemapIndex[S ~[]E, E, T any](s S, f func(int, E) T) []T {
 
 func Generate[T any](n int, f func(int) T) []T {
 	res := make([]T, n)
-	for i := 0; i <= n; i++ {
+	for i := 0; i < n; i++ {
 		res[i] = f(i)
 	}
 	return res
