@@ -1,3 +1,8 @@
+// Copyright (c) 2020-2024 Richard Cooper
+//
+// This file is a part of quenbyako/ext package.
+// See https://github.com/quenbyako/ext/blob/master/LICENSE for details
+
 package cmp
 
 import std "cmp"
@@ -11,7 +16,7 @@ import std "cmp"
 // An operator such as == or < will always report false when
 // comparing a NaN value with any other value, NaN or not.
 // See the [Compare] function for a consistent way to compare NaN values.
-type Ordered std.Ordered
+type Ordered = std.Ordered
 
 // Less reports whether x is less than y.
 // For floating-point types, a NaN is considered less than any non-NaN,

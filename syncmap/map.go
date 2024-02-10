@@ -1,3 +1,8 @@
+// Copyright (c) 2020-2024 Richard Cooper
+//
+// This file is a part of quenbyako/ext package.
+// See https://github.com/quenbyako/ext/blob/master/LICENSE for details
+
 package syncmap
 
 import (

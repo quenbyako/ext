@@ -1,5 +1,8 @@
-// Package cmp defines a set of useful constraints to be used
-// with type parameters.
+// Copyright (c) 2020-2024 Richard Cooper
+//
+// This file is a part of quenbyako/ext package.
+// See https://github.com/quenbyako/ext/blob/master/LICENSE for details
+
 package cmp
 
 // Signed is a constraint that permits any signed integer type.
