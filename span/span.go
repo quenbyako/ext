@@ -1,351 +1,59 @@
+// Copyright (c) 2020-2024 Richard Cooper
+//
+// This file is a part of quenbyako/ext package.
+// See https://github.com/quenbyako/ext/blob/master/LICENSE for details
+
 package span
 
 import (
+	"cmp"
 	"fmt"
+	"sort"
 	"strings"
 
-	"github.com/quenbyako/ext/cmp"
 	"github.com/quenbyako/ext/slices"
 )
 
-func Merge[T cmp.Ordered](s ...Span[T]) Span[T] {
+// обозначения для документации:
+//
+// n, m — верхняя и нижняя границы баунда
+//
+// [n:m] — включительно
+// (n:m) — не включительно
+// [n:m) — включительно слева, не включительно справа
+// {n:m} — включение не определено (не имеет значения для описываемого действия)
+// {n:m] — включение не определено слева, включительно справа
+//
+// [n:m] >< [n:m] — пересечение
+//
+// баунды всегда отсортированы по возрастанию нижней границы:
+//
+// [n:m][n:m] — конкретные значения не имеют значения, но m1 <= n2
+// [0:3][1:2] — конкретные значения важны, баунд 1 входит в баунд 2
+
+func Union[T any](s ...Span[T]) (res Span[T]) {
 	if len(s) == 0 {
-		return New[T]()
+		return nil
 	}
 
-	res := s[0]
-	if res == nil {
-		res = New[T]()
-	}
-
-	for _, s := range s[1:] {
+	for _, s := range s {
 		if s == nil {
 			continue
+		} else if res == nil {
+			res = s
+		} else {
+			res = res.Union(s)
 		}
-		res = res.Merge(s)
 	}
 
 	return res
 }
 
-type Span[T any] interface {
-	Add(Bound[T]) Span[T]
-	// IMPORTANT:  unlike add, remove is non-included. In mathematical terms,
-	// add is [ n : m ], and removing is ( n : m )
-	Remove(Bound[T]) Span[T]
-	In(T) bool
-	Merge(Span[T]) Span[T]
-	// проверяет, что ВЕСЬ интервал полностью входит в изучаемый, и не выходит
-	// за границы
-	Contains(Span[T]) bool
-	ContainsBound(Bound[T]) bool
-	Bounds() []Bound[T]
-}
-
-func New[T cmp.Ordered](bounds ...Bound[T]) Span[T] { return NewWithMerger(nil, bounds...) }
-
-// NewWithMerger is absolutely same constructor as New, but allows to add a
-// funtion, which checks, can we merge near bounds into single one. For example,
-// if you created integer span, you can merge [0:2][3:4] as [0:4], which will
-// mean completely same span.
-func NewWithMerger[T cmp.Ordered](isSimilar func(previousEnd, nextStart T) bool, bounds ...Bound[T]) Span[T] {
-	if isSimilar == nil {
-		isSimilar = isSimilarDefault[T]
-	}
-
-	var s Span[T] = &span[T]{
-		isSimilar: isSimilar,
-		bounds:    make([]Bound[T], 0, len(bounds)),
-	}
-	for _, b := range bounds {
-		s = s.Add(b)
-	}
-
-	return s
-}
-
-// this function exists to make correct deep equal, if necessary.
-func isSimilarDefault[T cmp.Ordered](previousEnd, nextStart T) bool { return false }
-
-type Bound[T any] interface {
-	Lo() T
-	Hi() T
-
-	// проверяет что y полностью входит в x
-	Contains(y Bound[T]) bool
-	// проверяет пересечение
-	In(i T) bool
-	Join(y Bound[T]) (z Bound[T], ok bool)
-	Overlaps(y Bound[T]) bool
-	Position(i T) int
-
-	fmt.Stringer
-}
-
-func NewBound[T cmp.Ordered](lo, hi T) Bound[T] {
-	if lo > hi {
-		panic("lo is higher than hi")
-	}
-	return bound[T]{lo: lo, loIncluded: true, hi: hi, hiIncluded: true}
-}
-
-func ToBasic[T any](s Span[T]) [][2]T {
-	return slices.Remap(s.Bounds(), func(b Bound[T]) [2]T { return [2]T{b.Lo(), b.Hi()} })
-}
-
-func FromBasicOrdered[T cmp.Ordered](s [][2]T) Span[T] {
-	return New(slices.Remap(s, func(b [2]T) Bound[T] { return NewBound(b[0], b[1]) })...)
-}
-
-type span[T cmp.Ordered] struct {
-	isSimilar func(previousEnd, nextStart T) bool
-	bounds    []Bound[T]
-}
-
-func (s *span[T]) Bounds() []Bound[T] { return s.bounds }
-
-// In tests whether a set contains an element. It has time complexity O(log r)
-// where r is the number of ranges of the set (since it does a binary search
-// over the ranges). In the worst case it is O(log n).
-func (s *span[T]) In(b T) bool {
-	_, ok := s.search(b)
-	return ok
-}
-
-func (s *span[T]) Contains(y Span[T]) bool {
-	return slices.IndexFunc(s.bounds, func(t Bound[T]) bool { return !s.ContainsBound(t) }) >= 0
-}
-
-func (s *span[T]) ContainsBound(y Bound[T]) bool {
-	i, ok := s.search(y.Lo())
-
-	return ok && s.bounds[i].Contains(y)
-}
-
-func (s *span[T]) Merge(y Span[T]) (z Span[T]) {
-	z = s
-	for _, b := range y.Bounds() {
-		z = z.Add(b)
-	}
-
-	return z
-}
-
-func (s *span[T]) Add(y Bound[T]) Span[T] {
-	if len(s.bounds) == 0 {
-		return &span[T]{
-			isSimilar: s.isSimilar,
-			bounds:    []Bound[T]{y},
-		}
-	}
-
-	// checking, that bound edges are already inside a span. Index is an index
-	// of found bound
-	loIndex, loOk := slices.BinarySearchFunc(s.bounds, nil, func(a, _ Bound[T]) int { return -a.Position(y.Lo()) })
-	hiIndex, hiOk := slices.BinarySearchFunc(s.bounds, nil, func(a, _ Bound[T]) int { return -a.Position(y.Hi()) })
-
-	if loOk && hiOk && loIndex == hiIndex {
-		return s.copy()
-	}
-
-	// if lower bound edge has corresponding value to new bound, we will merge
-	// them. Like [0:5] and [6:9] can be merged to [0:9]
-	if !loOk && loIndex > 0 && s.isSimilar(s.bounds[loIndex-1].Hi(), y.Lo()) {
-		loOk = true
-		loIndex--
-	}
-
-	// same like above, but for higher numbers
-	if !hiOk && hiIndex < len(s.bounds)-1 && s.isSimilar(y.Hi(), s.bounds[hiIndex+1].Lo()) {
-		hiOk = true
-	}
-
-	z := &span[T]{
-		isSimilar: s.isSimilar,
-		bounds:    make([]Bound[T], loIndex),
-	}
-	copy(z.bounds, s.bounds[:loIndex])
-
-	b := bound[T]{lo: y.Lo(), hi: y.Hi()}
-	if loOk {
-		b.lo = s.bounds[loIndex].Lo()
-	}
-	if hiOk {
-		b.hi = s.bounds[hiIndex].Hi()
-	}
-
-	z.bounds = append(z.bounds, b)
-
-	if b.hi < s.bounds[len(s.bounds)-1].Lo() {
-		z.bounds = append(z.bounds, s.bounds[hiIndex:]...)
-	}
-
-	return z
-}
-
-func (s *span[T]) Remove(y Bound[T]) Span[T] {
-	if len(s.bounds) == 0 {
-		return &span[T]{
-			isSimilar: s.isSimilar,
-			bounds:    []Bound[T]{},
-		}
-	}
-
-	if y.Lo() == y.Hi() || s.isSimilar(y.Lo(), y.Hi()) {
-		panic(fmt.Sprintf("bound to remove must be open (n:m) instead of closed [n:m], which means that this bound is invalid: %v", y))
-	}
-
-	// checking, that bound edges are already inside a span. Index is an index
-	// of found bound
-	loIndex, loPos := s.getIndex(y.Lo())
-	hiIndex, hiPos := s.getIndex(y.Hi())
-
-	// В каких ситуациях баунд может существовать: (для удаления показано <n:m>)
-	// * 1) баунд полностью сверху/снизу
-	// * 2) баунд полностью перекрывает весь спан
-	// * 3) баунд полностью между четким диапазоном (например '[0:1] >< [6:7]' '<3:4>' -> [0:1][6:7])
-	// * 4) баунд частично сверху/снизу, кусочек накладывается на крайний баунд
-	// * 5) баунд полностью внутри одного диапазона (например '> [0:10] <' '<3:4>' -> [0:3][4:10])
-	// * 6) баунд между несколькими диапазонами  (например '[0:2][4:4][7:8]' '<3:4>' -> [0:3][4:10])
-	switch {
-	// case 1
-	case hiPos == indexPositionLow || loPos == indexPositionHigh,
-		// case 3
-		hiPos == indexPositionBetween && loPos == indexPositionBetween && loIndex == hiIndex:
-		return s
-
-	// case 2
-	case loPos == indexPositionLow && hiPos == indexPositionHigh:
-		return NewWithMerger[T](s.isSimilar) // empty
-
-	// case 4
-	case loPos == indexPositionLow:
-		var modified []Bound[T]
-		if hiPos == indexPositionExact {
-			modified = []Bound[T]{NewBound(y.Hi(), s.bounds[hiIndex].Hi())}
-			hiIndex++
-		}
-		s.bounds = append(modified, s.bounds[hiIndex:]...)
-		return s
-
-	// case 4
-	case hiPos == indexPositionHigh:
-		var modified []Bound[T]
-		if loPos == indexPositionExact {
-			modified = []Bound[T]{NewBound(s.bounds[loIndex].Lo(), y.Lo())}
-			loIndex--
-		}
-		s.bounds = append(s.bounds[:loIndex], modified...)
-		return s
-
-	// case 5
-	case loPos == indexPositionExact && hiPos == indexPositionExact && loIndex == hiIndex:
-		b := s.bounds[loIndex]
-		s.bounds = slices.Replace(s.bounds, loIndex, hiIndex+1, NewBound(b.Lo(), y.Lo()), NewBound(y.Hi(), b.Hi()))
-		return s
-
-	// case 6
-	default:
-		// here we can be sure, that both of bounds to remove are inside span edges
-		var modified []Bound[T]
-		if loPos == indexPositionExact {
-			modified = append(modified, NewBound(s.bounds[loIndex].Lo(), y.Lo()))
-		}
-		if hiPos == indexPositionExact {
-			modified = append(modified, NewBound(y.Hi(), s.bounds[hiIndex].Hi()))
-			hiIndex++
-		}
-
-		s.bounds = slices.Replace(s.bounds, loIndex, hiIndex, modified...)
-		return s
-	}
-}
-
-func (s *span[T]) copy() Span[T] {
-	bounds := make([]Bound[T], len(s.bounds))
-	copy(bounds, s.bounds)
-	return &span[T]{isSimilar: s.isSimilar, bounds: bounds}
-}
-
-func (s *span[T]) edges() (lo, hi T) {
-	if len(s.bounds) == 0 {
-		panic("bounds are empty")
-	}
-
-	return s.bounds[0].Lo(), s.bounds[len(s.bounds)-1].Hi()
-}
-
-func (s *span[T]) search(value T) (int, bool) {
-	return slices.BinarySearchFunc(s.bounds, value, func(a Bound[T], b T) int { return -a.Position(b) })
-}
-
-// если значение не в баундах, то возвращается ВЕРХНИЙ иднекс.
-func (s *span[T]) getIndex(value T) (int, spanIndexPosition) {
-	if len(s.bounds) == 0 {
-		panic("bounds are empty")
-	} else if s.bounds[0].Lo() > value {
-		return 0, indexPositionLow
-	} else if value > s.bounds[len(s.bounds)-1].Hi() {
-		return len(s.bounds), indexPositionHigh
-	} else if v, ok := s.search(value); ok {
-		return v, indexPositionExact
-	} else {
-		return v, indexPositionBetween
-	}
-}
-
-type spanIndexPosition uint8
-
-const (
-	indexPositionExact spanIndexPosition = iota
-	// если возвращается between, то отдается правый (верхний) индекс
-	indexPositionBetween
-	indexPositionHigh
-	indexPositionLow
-)
-
-func (s *span[T]) String() string { return joinStringer(s.bounds, "") }
-
-type bound[T cmp.Ordered] struct {
-	loIncluded, hiIncluded bool
-	lo, hi                 T
-}
-
-func (x bound[T]) Lo() T                    { return x.lo }
-func (x bound[T]) LoBetter() (T, bool)      { return x.lo, x.loIncluded }
-func (x bound[T]) Hi() T                    { return x.hi }
-func (x bound[T]) HiBetter() (T, bool)      { return x.hi, x.hiIncluded }
-func (x bound[T]) Contains(y Bound[T]) bool { return x.lo >= y.Lo() && y.Hi() <= x.hi }
-func (x bound[T]) Overlaps(y Bound[T]) bool { return !(x.lo > y.Hi() || x.hi < y.Lo()) }
-func (x bound[T]) In(i T) bool              { return x.lo <= i && i <= x.hi }
-
-func (x bound[T]) Position(i T) int {
-	if i >= x.lo {
-		if i > x.hi {
-			return 1
-		}
-		return 0
-	}
-	return -1
-}
-
-// возвращает true, если интервалы пересекаются и создался новый интервал
-func (x bound[T]) Join(y Bound[T]) (z Bound[T], ok bool) {
-	if !x.Overlaps(y) {
-		return bound[T]{}, false
-	} else if x.Contains(y) {
-		return x, true
-	} else if y.Contains(x) {
-		return y, true
-	}
-
-	// now it overlaps by part, so bound must be modified
-	return bound[T]{lo: min(x.lo, y.Lo()), hi: max(x.hi, y.Hi())}, true
-}
-
-func (x bound[T]) String() string { return fmt.Sprintf("[%v:%v]", x.lo, x.hi) }
-
 func IsEqual[T comparable](a, b Span[T]) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+
 	aBounds, bBounds := a.Bounds(), b.Bounds()
 	if len(aBounds) != len(bBounds) {
 		return false
@@ -360,26 +68,191 @@ func IsEqual[T comparable](a, b Span[T]) bool {
 	return true
 }
 
-func IsBoundEqual[T comparable](a, b Bound[T]) bool { return a.Lo() == b.Lo() && a.Hi() == b.Hi() }
+type Span[T any] interface {
+	// Search(T) Position
+	Union(Span[T]) Span[T]
+	UnionBound(Bound[T]) Span[T]
 
-func min[T cmp.Ordered](i ...T) T {
-	var t T
-	for _, i := range i {
-		if i < t {
-			t = i
-		}
-	}
-	return t
+	Difference(Span[T]) Span[T]
+	DifferenceBound(Bound[T]) Span[T]
+	// // Contains checks, that all values of one span exists in other span
+	// Contains(Span[T]) bool
+	//
+	// ContainsBound checks, that all values of one bound exists in other span
+	ContainsBound(Bound[T]) bool
+	//
+	// Bounds returns a list of all bounds in a span
+	Bounds() []Bound[T]
 }
 
-func max[T cmp.Ordered](i ...T) T {
-	var t T
-	for _, i := range i {
-		if i > t {
-			t = i
-		}
+type span[T any] struct {
+	// next is a function, which returns nearest next values
+	next func(T) T
+	// cmp is a function, which compares two values. -1 means that a < b, 0
+	// means that a == b, and +1 means that a > 0
+	cmp func(a, b T) int
+	// bounds is a list of bounds, ordered by by lower bound. this list
+	// guarantees, that there is no any value, that contains in 2 bounds a the
+	// same time
+	bounds []Bound[T]
+}
+
+func New[T any](next func(T) T, cmp func(T, T) int, bounds ...Bound[T]) Span[T] {
+	if cmp == nil {
+		panic("cmp function is nil")
+	} else if next == nil {
+		panic("next function is nil")
 	}
-	return t
+
+	var s Span[T] = span[T]{
+		next:   next,
+		cmp:    cmp,
+		bounds: make([]Bound[T], 0, len(bounds)),
+	}
+	for _, b := range bounds {
+		s = s.UnionBound(b)
+	}
+
+	return s
+}
+
+func ToBasic[T any](s Span[T]) [][2]Edge[T] {
+	return slices.Remap(s.Bounds(), func(b Bound[T]) [2]Edge[T] { return [2]Edge[T]{b.Lo(), b.Hi()} })
+}
+
+func FromBasicOrdered[T cmp.Ordered](s [][2]T) Span[T] {
+	return New(nil, cmp.Compare, slices.Remap(s, func(b [2]T) Bound[T] { return NewBound(true, b[0], b[1], true) })...)
+}
+
+func (s span[T]) Bounds() []Bound[T] { return s.bounds }
+
+func (s span[T]) ContainsBound(y Bound[T]) bool {
+	lo := y.Lo()
+	if i, ok := s.search(lo.Value); ok {
+		return s.bounds[i].Contains(s.cmp, y)
+	}
+
+	return false
+}
+
+func (s span[T]) Union(y Span[T]) (z Span[T]) {
+	z = s
+	for _, b := range y.Bounds() {
+		z = z.UnionBound(b)
+	}
+
+	return z
+}
+
+func (s span[T]) UnionBound(bound Bound[T]) Span[T] {
+	var newBounds []Bound[T]
+
+	// Iterate over existing bounds in the interval
+	for _, existingBound := range s.bounds {
+		// If they overlap, merge them and replace the existing bound with the merged one
+		if mergedBound, merged := UnionBounds(s.next, s.cmp, existingBound, bound); merged {
+			bound = mergedBound
+			continue
+		}
+		// If there's no overlap, keep the existing bound unchanged
+		newBounds = append(newBounds, existingBound)
+	}
+
+	// Add the new bound to the interval
+	newBounds = append(newBounds, bound)
+
+	// Sort the new bounds by lower bound
+	sort.Slice(newBounds, func(i, j int) bool {
+		return s.cmp(newBounds[i].Lo().Value, newBounds[j].Lo().Value) == -1
+	})
+
+	// Update the interval's bounds
+	s.bounds = newBounds
+
+	return s
+}
+
+func (s span[T]) Difference(y Span[T]) (z Span[T]) {
+	z = s
+	for _, b := range y.Bounds() {
+		z = z.DifferenceBound(b)
+	}
+
+	return z
+}
+
+func (s span[T]) DifferenceBound(y Bound[T]) Span[T] {
+	var newBounds []Bound[T]
+
+	// Iterate over existing bounds in the interval
+	for _, existingBound := range s.bounds {
+		// If the existing bound is the one to be removed, skip it
+		if y.Contains(s.cmp, existingBound) {
+			continue
+		}
+		// If the existing bound overlaps with the bound to be removed, split it
+		if existingBound.Overlaps(s.cmp, y) {
+			// Get the difference between the existing bound and the bound to be removed
+			diffBounds := existingBound.Difference(s.cmp, y)
+			// Add the difference bounds to the new bounds list
+			newBounds = append(newBounds, diffBounds...)
+			continue
+		}
+		// If there's no overlap, keep the existing bound unchanged
+		newBounds = append(newBounds, existingBound)
+	}
+
+	// Update the interval's bounds
+	s.bounds = newBounds
+
+	return s
+}
+
+func (s span[T]) search(t T) (int, bool) {
+	return slices.BinarySearchFunc(s.bounds, t, func(a Bound[T], b T) int { return a.Position(s.cmp, b) })
+}
+
+// func (s span[T]) Search(value T) Position {
+// 	if len(s.bounds) == 0 {
+// 		return PositionNowhere{}
+// 	} else if i, ok := s.search(value); ok {
+// 		return PositionExact(i)
+// 	} else if i == 0 {
+// 		return PositionLower{}
+// 	} else if i == len(s.bounds) {
+// 		return PositionHigher{}
+// 	} else {
+// 		return PositionBetween{Lo: i - 1, Hi: i}
+// 	}
+// }
+
+// type Position interface{ _Position() }
+//
+// type PositionNowhere struct{}
+// type PositionHigher struct{}
+// type PositionLower struct{}
+// type PositionExact int
+// type PositionBetween struct{ Lo, Hi int }
+//
+// func (PositionNowhere) _Position()       {}
+// func (PositionNowhere) String() string   { return "PositionNowhere{}" }
+// func (PositionHigher) _Position()        {}
+// func (PositionHigher) String() string    { return "PositionHigher{}" }
+// func (PositionLower) _Position()         {}
+// func (PositionLower) String() string     { return "PositionLower{}" }
+// func (PositionExact) _Position()         {}
+// func (p PositionExact) String() string   { return fmt.Sprintf("PositionExact{%v}", int(p)) }
+// func (PositionBetween) _Position()       {}
+// func (p PositionBetween) String() string { return fmt.Sprintf("PositionBetween{%v : %v}", p.Lo, p.Hi) }
+
+func (s span[T]) String() string { return joinStringer(s.bounds, "") }
+
+func (s span[T]) edges() (lo, hi Edge[T]) {
+	if len(s.bounds) == 0 {
+		panic("bounds are empty")
+	}
+
+	return s.bounds[0].Lo(), s.bounds[len(s.bounds)-1].Hi()
 }
 
 func joinStringer[S ~[]T, T fmt.Stringer](s S, sep string) string {

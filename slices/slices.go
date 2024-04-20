@@ -205,3 +205,17 @@ func IsUniqueFunc[S ~[]E, E any](s S, eq func(E) bool) bool {
 func SortCmp[S ~[]E, E cmp.Cmp[E]](x S) S {
 	return SortFunc(x, func(a, b E) int { return a.Cmp(b) })
 }
+
+func Repeat[S ~[]E, E any](s S, times int) S {
+	if len(s) == 0 {
+		return S{}
+	}
+
+	res := make(S, times*len(s))
+	for i := range times {
+		n, m := i*len(s), (i+1)*len(s)
+		copy(res[n:m], s)
+	}
+
+	return res
+}

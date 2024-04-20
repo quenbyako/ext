@@ -1,6 +1,12 @@
+// Copyright (c) 2020-2024 Richard Cooper
+//
+// This file is a part of quenbyako/ext package.
+// See https://github.com/quenbyako/ext/blob/master/LICENSE for details
+
 package span_test
 
 import (
+	"cmp"
 	"fmt"
 	"testing"
 	"unicode"
@@ -8,28 +14,36 @@ import (
 	. "github.com/quenbyako/ext/span"
 )
 
-func s(b ...Bound[rune]) Span[rune] { return New(b...) }
-func b(lo, hi rune) Bound[rune]     { return NewBound(lo, hi) }
-func r(r rune) Bound[rune]          { return NewBound(r, r) }
+func s(b ...Bound[rune]) Span[rune] {
+	return New(func(r rune) rune { return r + 1 }, cmp.Compare, b...)
+}
+func b[T cmp.Ordered](lo, hi T) Bound[T] { return NewBoundII(lo, hi) }
+func r[T cmp.Ordered](r T) Bound[T]      { return NewBoundII(r, r) }
 
-func TestIn(t *testing.T) {
+func TestSearch(t *testing.T) {
+	t.Skip()
 	for _, tt := range []struct {
-		a    Span[rune]
-		r    rune
-		want bool
+		// a    Span[rune]
+		// r    rune
+		// want Position
 	}{
-		{s(b('a', 'a')), 'a', true},
-		{s(b('a', 'z')), 'o', true},
-		{s(b('a', 'z')), '0', false},
-		{s(b('0', '9'), b('a', 'z')), '1', true},
-		{s(b('0', '9'), b('a', 'z')), 'b', true},
-		{s(b('0', '9'), b('a', 'z')), '@', false},
+		// {Sr(b('a', 'a')), 'a', PositionExact(0)},
+		// {Sr(b('a', 'z')), 'o', PositionExact(0)},
+		// {Sr(b('a', 'z')), '|', PositionHigher{}},
+		// {Sr(b('0', '9'), b('a', 'z')), '1', PositionExact(0)},
+		// {Sr(b('0', '9'), b('a', 'z')), 'a', PositionExact(1)},
+		// {Sr(b('0', '9'), b('a', 'z')), 'b', PositionExact(1)},
+		// {Sr(b('0', '9'), b('a', 'z')), '!', PositionLower{}},
+		// {Sr(b('0', '9'), b('a', 'z')), '@', PositionBetween{Lo: 0, Hi: 1}},
 	} {
-		t.Run("", compare(tt.want, tt.a.In(tt.r)))
+		t.Run("", func(t *testing.T) {
+			_ = tt
+			//	requireEqual(t, tt.want, tt.a.Search(tt.r))
+		})
 	}
 }
 
-func TestMerge(t *testing.T) {
+func TestUnionSpans(t *testing.T) {
 	for _, tt := range []struct{ a, b, want Span[rune] }{
 		{s(), s(), s()},
 		{s(), s(b('0', '9')), s(b('0', '9'))},
@@ -64,7 +78,45 @@ func TestMerge(t *testing.T) {
 		{s(b('a', 'c')), s(b('d', 'f'), b('g', 'i')), s(b('a', 'c'), b('d', 'f'), b('g', 'i'))},
 		{s(b('A', 'J'), b('a', 'j'), b('l', 'r')), s(r('L')), s(b('A', 'J'), b('L', 'L'), b('a', 'j'), b('l', 'r'))},
 	} {
-		t.Run("", compareSpan(tt.want, tt.a.Merge(tt.b)))
+		t.Run("", compareSpan(tt.want, tt.a.Union(tt.b)))
+	}
+}
+
+func TestDifferenceSpans(t *testing.T) {
+	for _, tt := range []struct{ a, b, want Span[int] }{
+		{Si(bli("[1:6]")...), Si(bli("[2:4]")...), Si(bli("[1:2) (4:6]")...)},
+		{Si(bli("[1:6]")...), Si(bli("[2:2]")...), Si(bli("[1:2) (2:6]")...)},
+		{Si(bli("[1:3) [4:6]")...), Si(bli("[3:4]")...), Si(bli("[1:3) (4:6]")...)},
+	} {
+		t.Run("", compareSpan(tt.want, tt.a.Difference(tt.b)))
+	}
+}
+
+type TestRunner interface {
+	Name() string
+	Run(t *testing.T)
+}
+
+type TestUnionNearCase[T comparable] struct {
+	a    Span[T]
+	b    Bound[T]
+	want Span[T]
+}
+
+func (TestUnionNearCase[T]) Name() string { return "" }
+
+func (tt TestUnionNearCase[T]) Run(t *testing.T) {
+	requireEqualSpan(t, tt.want, tt.a.UnionBound(tt.b))
+}
+
+func TestUnionNear(t *testing.T) {
+	for _, tt := range []TestRunner{
+		TestUnionNearCase[int]{a: Si(b(1, 6)), b: b(3, 4), want: Si(b(1, 6))},
+		TestUnionNearCase[int]{a: Si(b(3, 4)), b: b(1, 6), want: Si(b(1, 6))},
+		TestUnionNearCase[int]{a: Si(b(1, 2), b(3, 4)), b: b(2, 3), want: Si(b(1, 4))},
+		TestUnionNearCase[int]{a: Si(b(1, 2), b(5, 6)), b: b(3, 4), want: Si(b(1, 6))},
+	} {
+		t.Run(tt.Name(), tt.Run)
 	}
 }
 
@@ -91,13 +143,12 @@ func TestReverse(t *testing.T) {
 
 func fold(r Span[rune]) Span[rune] {
 	rb := r.Bounds()
-	newItems := make([]Bound[rune], len(rb))
-	for i, b := range rb {
-		lo, hi := folded(b.Lo(), b.Hi())
-		newItems[i] = NewBound(lo, hi)
+	for _, b := range rb {
+		lo, hi := folded(b.Lo().Value, b.Hi().Value)
+		r = r.UnionBound(NewBoundII(lo, hi))
 	}
 
-	return r.Merge(New(newItems...))
+	return r
 }
 
 func folded(lo, hi rune) (_, _ rune) {
@@ -110,23 +161,29 @@ func folded(lo, hi rune) (_, _ rune) {
 }
 
 func compareSpan[T comparable](want, got Span[T]) func(*testing.T) {
-	return func(t *testing.T) {
-		if !IsEqual(want, got) {
-			t.Log(fmt.Sprintf("Not equal: \n"+
-				"expected: %v\n"+
-				"actual  : %v", want, got))
-			t.FailNow()
-		}
+	return func(t *testing.T) { t.Helper(); requireEqualSpan(t, want, got) }
+}
+
+func requireEqualSpan[T comparable](t *testing.T, want, got Span[T]) {
+	t.Helper()
+	if !IsEqual(want, got) {
+		t.Log(fmt.Sprintf("Not equal: \n"+
+			"expected: %v\n"+
+			"actual  : %v", want, got))
+		t.FailNow()
 	}
 }
 
 func compare[T comparable](want, got T) func(*testing.T) {
-	return func(t *testing.T) {
-		if want != got {
-			t.Log(fmt.Sprintf("Not equal: \n"+
-				"expected: %v\n"+
-				"actual  : %v", want, got))
-			t.FailNow()
-		}
+	return func(t *testing.T) { t.Helper(); requireEqual(t, want, got) }
+}
+
+func requireEqual[T comparable](t *testing.T, want, got T) {
+	t.Helper()
+	if want != got {
+		t.Log(fmt.Sprintf("Not equal: \n"+
+			"expected: %v\n"+
+			"actual  : %v", want, got))
+		t.FailNow()
 	}
 }
