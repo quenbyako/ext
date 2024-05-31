@@ -206,12 +206,12 @@ func SortCmp[S ~[]E, E cmp.Cmp[E]](x S) S {
 	return SortFunc(x, func(a, b E) int { return a.Cmp(b) })
 }
 
-func Repeat[S ~[]E, E any](s S, times int) S {
-	if len(s) == 0 {
-		return S{}
+func Repeat[T any](times int, s ...T) []T {
+	if len(s) == 0 || times <= 0 {
+		return []T{}
 	}
 
-	res := make(S, times*len(s))
+	res := make([]T, times*len(s))
 	for i := range times {
 		n, m := i*len(s), (i+1)*len(s)
 		copy(res[n:m], s)

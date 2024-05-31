@@ -8,6 +8,7 @@ package span
 import (
 	"cmp"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -60,7 +61,7 @@ func IsEqual[T comparable](a, b Span[T]) bool {
 	}
 
 	for i := range aBounds {
-		if !IsBoundEqual(aBounds[i], bBounds[i]) {
+		if aBounds[i] != bBounds[i] {
 			return false
 		}
 	}
@@ -87,17 +88,118 @@ type Span[T any] interface {
 
 type span[T any] struct {
 	// next is a function, which returns nearest next values
-	next func(T) T
+	next nextFunc[T]
 	// cmp is a function, which compares two values. -1 means that a < b, 0
 	// means that a == b, and +1 means that a > 0
-	cmp func(a, b T) int
+	cmp compareFunc[T]
 	// bounds is a list of bounds, ordered by by lower bound. this list
 	// guarantees, that there is no any value, that contains in 2 bounds a the
 	// same time
 	bounds []Bound[T]
 }
 
-func New[T any](next func(T) T, cmp func(T, T) int, bounds ...Bound[T]) Span[T] {
+func NewInt(b ...Bound[int]) Span[int]             { return New(nextInt, cmp.Compare, b...) }
+func NewInt8(b ...Bound[int8]) Span[int8]          { return New(nextInt, cmp.Compare, b...) }
+func NewInt16(b ...Bound[int16]) Span[int16]       { return New(nextInt, cmp.Compare, b...) }
+func NewInt32(b ...Bound[int32]) Span[int32]       { return New(nextInt, cmp.Compare, b...) }
+func NewInt64(b ...Bound[int64]) Span[int64]       { return New(nextInt, cmp.Compare, b...) }
+func NewUint(b ...Bound[uint]) Span[uint]          { return New(nextInt, cmp.Compare, b...) }
+func NewUint8(b ...Bound[uint8]) Span[uint8]       { return New(nextInt, cmp.Compare, b...) }
+func NewUint16(b ...Bound[uint16]) Span[uint16]    { return New(nextInt, cmp.Compare, b...) }
+func NewUint32(b ...Bound[uint32]) Span[uint32]    { return New(nextInt, cmp.Compare, b...) }
+func NewUint64(b ...Bound[uint64]) Span[uint64]    { return New(nextInt, cmp.Compare, b...) }
+func NewFloat32(b ...Bound[float32]) Span[float32] { return New(math.Nextafter32, cmp.Compare, b...) }
+func NewFloat64(b ...Bound[float64]) Span[float64] { return New(math.Nextafter, cmp.Compare, b...) }
+func NewByte(b ...Bound[byte]) Span[byte]          { return New(nextInt, cmp.Compare, b...) }
+func NewRune(b ...Bound[rune]) Span[rune]          { return New(nextInt, cmp.Compare, b...) }
+
+// TODO: implement nextString in a correct way.
+//
+// Current problem is that we can get next value fomr nextString, but we can't
+// do it for previous string value.
+//
+// Even though, it's worthless right now to spend so much time on this, because
+// there are soooooo tiny amount of cases, when we need to use string as a span.
+func _NewString(b ...Bound[string]) Span[string] { return New(nextString, cmp.Compare, b...) }
+
+// just to tell staticcheck that we are using this function in the future
+var _ = _NewString
+
+type nextSimple interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
+		~uintptr
+}
+
+func zero[T any]() (t T) { return t }
+func nextInt[T nextSimple](v, t T) T {
+	switch {
+	case v == t:
+		return v
+	case v < t:
+		return v + 1
+	default:
+		return v - 1
+	}
+}
+
+func nextString(v, t string) string {
+	switch {
+	case v == t:
+		return v
+	case v < t:
+		return string(nextArray([]rune(v), func(r rune) rune { return r + 1 }, zero[rune]))
+	default:
+		panic("not implemented")
+	}
+}
+
+// using zero as function, cause for array of ints zero value will be negative minimum value
+func nextArray[T cmp.Ordered](a []T, next func(T) T, zero func() T) []T {
+	if len(a) == 0 {
+		return []T{zero()}
+	}
+
+	for i := len(a) - 1; i >= 0; i-- {
+		old := a[i]
+		a[i] = next(old)
+		if a[i] > old { // if not overflow
+			break
+		}
+
+		// If it did overflow, carry over to the next element
+		// If we're at the first element, insert a new element at the beginning
+		if i == 0 {
+			a = make([]T, len(a)+1)
+			for i := range a {
+				a[i] = zero()
+			}
+		}
+	}
+
+	return a
+}
+
+// func prevArray[T cmp.Ordered](a []T, prev func(T) T) []T {
+// 	if len(a) == 0 {
+// 		panic("got the smallest possible value")
+// 	}
+// 	for i := len(a) - 1; i >= 0; i-- {
+// 		old := a[i]
+// 		a[i] = prev(old)
+// 		if a[i] < old { // if not underflow
+// 			break
+// 		}
+// 		// If it did underflow, carry over to the next element
+// 		// If we're at the first element, insert a new element at the beginning
+// 		if i == 0 {
+// 			a = append([]T{prev(old)}, a...)
+// 		}
+// 	}
+// 	return a
+// }
+
+func New[T any](next nextFunc[T], cmp func(T, T) int, bounds ...Bound[T]) Span[T] {
 	if cmp == nil {
 		panic("cmp function is nil")
 	} else if next == nil {
@@ -117,18 +219,60 @@ func New[T any](next func(T) T, cmp func(T, T) int, bounds ...Bound[T]) Span[T] 
 }
 
 func ToBasic[T any](s Span[T]) [][2]Edge[T] {
-	return slices.Remap(s.Bounds(), func(b Bound[T]) [2]Edge[T] { return [2]Edge[T]{b.Lo(), b.Hi()} })
+	return slices.Remap(s.Bounds(), func(b Bound[T]) [2]Edge[T] { return [2]Edge[T]{b.Lo, b.Hi} })
+}
+
+func ToBasicBounds[T any](s ...Bound[T]) [][2]Edge[T] {
+	return slices.Remap(s, func(b Bound[T]) [2]Edge[T] { return [2]Edge[T]{b.Lo, b.Hi} })
 }
 
 func FromBasicOrdered[T cmp.Ordered](s [][2]T) Span[T] {
 	return New(nil, cmp.Compare, slices.Remap(s, func(b [2]T) Bound[T] { return NewBound(true, b[0], b[1], true) })...)
 }
 
+// MakeStrictBounds creates a new span with the given bounds, ensuring that all
+// bounds have included edges. If some bound in input span contains excluded
+// edge, `next` function will be used to get the next value for the bound.
+func MakeStrictBounds[T any](s Span[T], cmp compareFunc[T], next nextFunc[T]) Span[T] {
+	bounds := s.Bounds()
+	if len(bounds) == 0 {
+		return s
+	}
+
+	minValue := bounds[0].Lo.Value
+	maxValue := bounds[len(bounds)-1].Hi.Value
+
+	newBounds := make([]Bound[T], 0, len(bounds))
+	for _, bound := range bounds {
+		if bound.Lo.Included && bound.Hi.Included {
+			newBounds = append(newBounds, bound)
+			continue
+		}
+
+		nlo, nhi := bound.Lo.Value, bound.Hi.Value
+
+		if !bound.Lo.Included {
+			nlo = next(bound.Lo.Value, maxValue)
+		}
+		if !bound.Hi.Included {
+			nhi = next(bound.Hi.Value, minValue)
+		}
+
+		// handling invalid bound
+		if cmp(nlo, nhi) > 0 {
+			continue
+		}
+
+		newBounds = append(newBounds, NewBoundEdgesFunc(Edge[T]{Value: nlo, Included: true}, Edge[T]{Value: nhi, Included: true}, cmp))
+	}
+
+	return New(next, cmp, newBounds...)
+}
+
 func (s span[T]) Bounds() []Bound[T] { return s.bounds }
 
 func (s span[T]) ContainsBound(y Bound[T]) bool {
-	lo := y.Lo()
-	if i, ok := s.search(lo.Value); ok {
+	if i, ok := s.search(y.Lo.Value); ok {
 		return s.bounds[i].Contains(s.cmp, y)
 	}
 
@@ -163,7 +307,7 @@ func (s span[T]) UnionBound(bound Bound[T]) Span[T] {
 
 	// Sort the new bounds by lower bound
 	sort.Slice(newBounds, func(i, j int) bool {
-		return s.cmp(newBounds[i].Lo().Value, newBounds[j].Lo().Value) == -1
+		return s.cmp(newBounds[i].Lo.Value, newBounds[j].Lo.Value) == -1
 	})
 
 	// Update the interval's bounds
@@ -247,12 +391,13 @@ func (s span[T]) search(t T) (int, bool) {
 
 func (s span[T]) String() string { return joinStringer(s.bounds, "") }
 
-func (s span[T]) edges() (lo, hi Edge[T]) {
-	if len(s.bounds) == 0 {
-		panic("bounds are empty")
-	}
+func (s span[T]) Format(f fmt.State, verb rune) {
+	flags := string(slices.Filter([]rune("-+# 0"), func(r rune) bool { return f.Flag(int(r)) }))
+	fmtValue := "%" + flags + string(verb)
 
-	return s.bounds[0].Lo(), s.bounds[len(s.bounds)-1].Hi()
+	for _, b := range s.bounds {
+		fmt.Fprintf(f, fmtValue, b)
+	}
 }
 
 func joinStringer[S ~[]T, T fmt.Stringer](s S, sep string) string {

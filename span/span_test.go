@@ -7,16 +7,14 @@ package span_test
 
 import (
 	"cmp"
-	"fmt"
 	"testing"
 	"unicode"
 
+	"github.com/quenbyako/ext/span"
 	. "github.com/quenbyako/ext/span"
 )
 
-func s(b ...Bound[rune]) Span[rune] {
-	return New(func(r rune) rune { return r + 1 }, cmp.Compare, b...)
-}
+func s(b ...Bound[rune]) Span[rune]      { return New(Next[rune], cmp.Compare, b...) }
 func b[T cmp.Ordered](lo, hi T) Bound[T] { return NewBoundII(lo, hi) }
 func r[T cmp.Ordered](r T) Bound[T]      { return NewBoundII(r, r) }
 
@@ -135,6 +133,26 @@ func TestFold(t *testing.T) {
 	}
 }
 
+func TestMakeStrictBounds(t *testing.T) {
+	for _, tt := range []struct {
+		in   Span[rune]
+		want Span[rune]
+	}{
+		{sr("(a:z)"), sr("[b:y]")},
+		{sr("[a:z)"), sr("[a:y]")},
+		{sr("[a:z)", "[0:9]"), sr("[a:y]", "[0:9]")},
+		{sr("(a:z)", "(0:9)"), sr("[b:y]", "[1:8]")},
+
+		// special cases:
+		// * MakeStrictBounds doesn't normalizing,
+		{sr("[1:2]", "[2:3]"), sr("[1:2]", "[2:3]")},
+		// * cuts invalid bounds,
+		{NewRune(Bound[rune]{Edge[rune]{Value: 1, Included: false}, Edge[rune]{Value: 2, Included: false}}), span.NewRune()},
+	} {
+		t.Run("", compareSpan(tt.want, MakeStrictBounds(tt.in, cmp.Compare, Next)))
+	}
+}
+
 func TestReverse(t *testing.T) {
 	want := s(b('A', 'Z'), b('a', 'z'))
 	got := s(b('a', 'z'), b('A', 'Z'))
@@ -144,7 +162,7 @@ func TestReverse(t *testing.T) {
 func fold(r Span[rune]) Span[rune] {
 	rb := r.Bounds()
 	for _, b := range rb {
-		lo, hi := folded(b.Lo().Value, b.Hi().Value)
+		lo, hi := folded(b.Lo.Value, b.Hi.Value)
 		r = r.UnionBound(NewBoundII(lo, hi))
 	}
 
@@ -167,9 +185,9 @@ func compareSpan[T comparable](want, got Span[T]) func(*testing.T) {
 func requireEqualSpan[T comparable](t *testing.T, want, got Span[T]) {
 	t.Helper()
 	if !IsEqual(want, got) {
-		t.Log(fmt.Sprintf("Not equal: \n"+
+		t.Logf("Not equal: \n"+
 			"expected: %v\n"+
-			"actual  : %v", want, got))
+			"actual  : %v", want, got)
 		t.FailNow()
 	}
 }
@@ -181,9 +199,9 @@ func compare[T comparable](want, got T) func(*testing.T) {
 func requireEqual[T comparable](t *testing.T, want, got T) {
 	t.Helper()
 	if want != got {
-		t.Log(fmt.Sprintf("Not equal: \n"+
+		t.Logf("Not equal: \n"+
 			"expected: %v\n"+
-			"actual  : %v", want, got))
+			"actual  : %v", want, got)
 		t.FailNow()
 	}
 }
