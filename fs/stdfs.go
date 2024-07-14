@@ -12,24 +12,47 @@ import (
 	stdfs "io/fs"
 )
 
+// Generic file system errors.
+// Errors returned by file systems can be tested against these errors
+// using [errors.Is].
 var (
 	ErrInvalid    = stdfs.ErrInvalid    // "invalid argument"
 	ErrPermission = stdfs.ErrPermission // "permission denied"
 	ErrExist      = stdfs.ErrExist      // "file already exists"
 	ErrNotExist   = stdfs.ErrNotExist   // "file does not exist"
 	ErrClosed     = stdfs.ErrClosed     // "file already closed"
-
-	// SkipDir is used as a return value from WalkDirFuncs to indicate that
-	// the directory named in the call is to be skipped. It is not returned
-	// as an error by any function.
-	SkipDir = stdfs.SkipDir
 )
+
+// SkipDir is used as a return value from WalkDirFuncs to indicate that
+// the directory named in the call is to be skipped. It is not returned
+// as an error by any function.
+var SkipDir = stdfs.SkipDir
 
 // PathError records an error and the operation and file path that caused it.
 type PathError = stdfs.PathError
 
+// Glob returns the names of all files matching pattern or nil
+// if there is no matching file. The syntax of patterns is the same
+// as in [path.Match]. The pattern may describe hierarchical names such as
+// usr/*/bin/ed.
+//
+// Glob ignores file system errors such as I/O errors reading directories.
+// The only possible returned error is [path.ErrBadPattern], reporting that
+// the pattern is malformed.
+//
+// If fs implements [GlobFS], Glob calls fs.Glob.
+// Otherwise, Glob uses [ReadDir] to traverse the directory tree
+// and look for matches for the pattern.
 func Glob(fsys FS, pattern string) (matches []string, err error) { return stdfs.Glob(fsys, pattern) }
 
+// ReadFile reads the named file from the file system fs and returns its contents.
+// A successful call returns a nil error, not [io.EOF].
+// (Because ReadFile reads the whole file, the expected EOF
+// from the final Read is not treated as an error to be reported.)
+//
+// If fs implements [ReadFileFS], ReadFile calls fs.ReadFile.
+// Otherwise ReadFile calls fs.Open and uses Read and Close
+// on the returned [File].
 func ReadFile(fsys FS, name string) ([]byte, error) { return stdfs.ReadFile(fsys, name) }
 
 // ValidPath reports whether the given path name is valid for use in a call to
@@ -61,10 +84,20 @@ func ValidPath(name string) bool { return stdfs.ValidPath(name) }
 // itself is a symbolic link, its target will be walked.
 func WalkDir(fsys FS, root string, fn WalkDirFunc) error { return stdfs.WalkDir(fsys, root, fn) }
 
+// A DirEntry is an entry read from a directory
+// (using the [ReadDir] function or a [ReadDirFile]'s ReadDir method).
 type DirEntry = stdfs.DirEntry
 
+// FileInfoToDirEntry returns a [DirEntry] that returns information from info.
+// If info is nil, FileInfoToDirEntry returns nil.
 func FileInfoToDirEntry(info FileInfo) DirEntry { return stdfs.FileInfoToDirEntry(info) }
 
+// ReadDir reads the named directory
+// and returns a list of directory entries sorted by filename.
+//
+// If fs implements [ReadDirFS], ReadDir calls fs.ReadDir.
+// Otherwise ReadDir calls fs.Open and uses ReadDir and Close
+// on the returned file.
 func ReadDir(fsys FS, name string) ([]DirEntry, error) { return stdfs.ReadDir(fsys, name) }
 
 // An FS provides access to a hierarchical file system.

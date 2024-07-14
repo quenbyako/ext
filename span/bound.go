@@ -10,8 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/quenbyako/ext/slices"
 )
 
 type nextFunc[T any] func(T, T) T
@@ -133,7 +131,7 @@ func NewBoundEdgesFunc[T any](lo, hi Edge[T], cmp compareFunc[T]) Bound[T] {
 	} else if compared := cmp(lo.Value, hi.Value); compared > 0 {
 		panic(fmt.Sprintf("lo is higher than hi: %v > %v", lo.Value, hi.Value))
 	} else if compared == 0 && (!lo.Included || !hi.Included) {
-		panic("no values inside bound: " + boundString(lo, hi, "", 'v'))
+		panic(fmt.Sprintf("no values inside bound: %v", Bound[T]{Lo: lo, Hi: hi}))
 	}
 
 	return Bound[T]{Lo: lo, Hi: hi}
@@ -206,32 +204,24 @@ func (a Bound[T]) Difference(cmp compareFunc[T], b Bound[T]) (res []Bound[T]) {
 	return res
 }
 
-func (x Bound[T]) String() (res string) {
-	return boundString(newEdge(x.Lo.Value, x.Lo.Included), newEdge(x.Hi.Value, x.Hi.Included), "", 'v')
-}
+func (x Bound[T]) String() (res string) { return fmt.Sprintf("%v", x) }
 
 func (s Bound[T]) Format(f fmt.State, verb rune) {
-	flags := string(slices.Filter([]rune("-+# 0"), func(r rune) bool { return f.Flag(int(r)) }))
-
-	f.Write([]byte(boundString(s.Lo, s.Hi, flags, verb)))
-}
-
-func boundString[T any](lo, hi Edge[T], flags string, verb rune) (res string) {
-	fmtValue := "%" + flags + string(verb)
-
-	if lo.Included {
-		res += "["
+	var buf string
+	if s.Lo.Included {
+		buf += "["
 	} else {
-		res += "("
+		buf += "("
 	}
 
-	res += fmt.Sprintf(fmtValue+":"+fmtValue, lo.Value, hi.Value)
+	format := fmt.FormatString(f, verb)
+	buf += fmt.Sprintf(format+":"+format, s.Lo.Value, s.Hi.Value)
 
-	if hi.Included {
-		res += "]"
+	if s.Hi.Included {
+		buf += "]"
 	} else {
-		res += ")"
+		buf += ")"
 	}
 
-	return res
+	f.Write([]byte(buf))
 }

@@ -219,3 +219,21 @@ func Repeat[T any](times int, s ...T) []T {
 
 	return res
 }
+
+// Batch batches []E into [][]E in groups of size. The final chunk of []E will be
+// smaller than size if the input slice cannot be chunked evenly. It does not
+// make any copies of slice elements.
+//
+// As an example, take a slice of 5 integers and create chunks of 2 integers
+// each (the final value creates a short chunk):
+//
+//	slices.Batch([]int{1, 2, 3, 4, 5}, 2) = [][]int{{1, 2}, {3, 4}, {5}}
+func Batch[S ~[]E, E any](s S, size int) (batches []S) {
+	batches = make([]S, 0, (len(s)+size-1)/size)
+
+	for size < len(s) {
+		s, batches = s[size:], append(batches, s[0:size:size])
+	}
+
+	return append(batches, s)
+}
