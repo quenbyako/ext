@@ -7,7 +7,7 @@ package span_test
 
 import (
 	"cmp"
-	"fmt"
+	"errors"
 	"math"
 	"strconv"
 	"strings"
@@ -20,14 +20,34 @@ import (
 
 type ttype = float64
 
-func bl(b ...Bound[ttype]) []Bound[ttype] { return b }
-func bxx(lo, hi ttype) Bound[ttype]       { return NewBoundXX(lo, hi) }
-func bxi(lo, hi ttype) Bound[ttype]       { return NewBoundXI(lo, hi) }
-func bix(lo, hi ttype) Bound[ttype]       { return NewBoundIX(lo, hi) }
-func bii(lo, hi ttype) Bound[ttype]       { return NewBoundII(lo, hi) }
+func bxi(lo, hi ttype) Bound[ttype] { return NewBoundXI(lo, hi) }
+func bix(lo, hi ttype) Bound[ttype] { return NewBoundIX(lo, hi) }
+func bii(lo, hi ttype) Bound[ttype] { return NewBoundII(lo, hi) }
+
+func sr(b ...string) Span[rune] {
+	bounds := make([]Bound[rune], len(b))
+	for i, item := range b {
+		bounds[i] = br(item)
+	}
+
+	return New(Next[rune], cmp.Compare[rune], bounds...)
+}
+
+func br(s string) Bound[rune] {
+	if b, err := ParseBound(s, func(s string) (rune, error) {
+		if r := []rune(s); len(r) == 1 {
+			return r[0], nil
+		}
+		return 0, errors.New("invalid value, should be only one rune")
+	}); err != nil {
+		panic(err)
+	} else {
+		return b
+	}
+}
 
 func bf(s string) Bound[ttype] {
-	if b, err := ParseBound(s, func(s string) (ttype, error) { return strconv.ParseFloat(s, 10) }); err != nil {
+	if b, err := ParseBound(s, func(s string) (ttype, error) { return strconv.ParseFloat(s, 64) }); err != nil {
 		panic(err)
 	} else {
 		return b
@@ -59,9 +79,9 @@ func TestContains(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			if got := tt.a.Contains(cmp.Compare, tt.b); tt.want != got {
-				t.Log(fmt.Sprintf("Not equal: \n"+
+				t.Logf("Not equal: \n"+
 					"expected: %v\n"+
-					"actual  : %v", tt.want, got))
+					"actual  : %v", tt.want, got)
 				t.FailNow()
 			}
 		})
@@ -103,28 +123,29 @@ func TestUnion(t *testing.T) {
 
 func TestDifference(t *testing.T) {
 	for _, tt := range []struct {
+		name string
 		a, b Bound[ttype]
 		want []Bound[ttype]
 	}{
-		{bf("[1:3]"), bf("(1:2)"), blf("[1:1] [2:3]")}, // 0
-		{bf("[1:3]"), bf("(1:2]"), blf("[1:1] (2:3]")}, // 1
-		{bf("[1:2]"), bf("[1:3]"), nil},                // 2
-		{bf("[1:4]"), bf("[2:3]"), blf("[1:2) (3:4]")}, // 3
-		{bf("[1:4]"), bf("(1:4)"), blf("[1:1] [4:4]")}, // 4
-		{bf("[1:3]"), bf("(1:2]"), blf("[1:1] (2:3]")}, // 5
-		{bf("[1:3]"), bf("(0:4)"), nil},                // 6
-		{bf("[1:3]"), bf("[0:2]"), blf("(2:3]")},       // 7
-		{bf("[1:3]"), bf("[0:4]"), nil},                // 8
-		{bf("(1:3)"), bf("[2:4]"), blf("(1:2)")},       // 9
-		{bf("(1:3)"), bf("(2:4)"), blf("(1:2]")},       // 10
-		{bf("(1:3]"), bf("(2:4)"), blf("(1:2]")},       // 11
-		{bf("[1:3)"), bf("(2:4)"), blf("[1:2]")},       // 12
-		{bf("[1:3]"), bf("(0:1]"), blf("(1:3]")},       // 13
-		{bf("[1:3]"), bf("[1:1]"), blf("(1:3]")},       // 14
-		{bf("(1:3)"), bf("[1:1]"), blf("(1:3)")},       // 15
-		{bf("[1:1]"), bf("(1:3)"), blf("[1:1]")},       // 16
-		{bf("[1:1]"), bf("[1:3]"), nil},                // 17
-		{bf("[1:1]"), bf("[1:1]"), nil},                // 18
+		{"#00", bf("[1:3]"), bf("(1:2)"), blf("[1:1] [2:3]")},
+		{"#01", bf("[1:3]"), bf("(1:2]"), blf("[1:1] (2:3]")},
+		{"#02", bf("[1:2]"), bf("[1:3]"), nil},
+		{"#03", bf("[1:4]"), bf("[2:3]"), blf("[1:2) (3:4]")},
+		{"#04", bf("[1:4]"), bf("(1:4)"), blf("[1:1] [4:4]")},
+		{"#05", bf("[1:3]"), bf("(1:2]"), blf("[1:1] (2:3]")},
+		{"#06", bf("[1:3]"), bf("(0:4)"), nil},
+		{"#07", bf("[1:3]"), bf("[0:2]"), blf("(2:3]")},
+		{"#08", bf("[1:3]"), bf("[0:4]"), nil},
+		{"#09", bf("(1:3)"), bf("[2:4]"), blf("(1:2)")},
+		{"#10", bf("(1:3)"), bf("(2:4)"), blf("(1:2]")},
+		{"#11", bf("(1:3]"), bf("(2:4)"), blf("(1:2]")},
+		{"#12", bf("[1:3)"), bf("(2:4)"), blf("[1:2]")},
+		{"#13", bf("[1:3]"), bf("(0:1]"), blf("(1:3]")},
+		{"#14", bf("[1:3]"), bf("[1:1]"), blf("(1:3]")},
+		{"#15", bf("(1:3)"), bf("[1:1]"), blf("(1:3)")},
+		{"#16", bf("[1:1]"), bf("(1:3)"), blf("[1:1]")},
+		{"#17", bf("[1:1]"), bf("[1:3]"), nil},
+		{"#18", bf("[1:1]"), bf("[1:1]"), nil},
 	} {
 		t.Run("", compareBounds(tt.want, tt.a.Difference(cmp.Compare, tt.b)))
 	}
@@ -149,9 +170,9 @@ func TestOverlaps(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			if got := tt.a.Overlaps(cmp.Compare, tt.b); tt.want != got {
-				t.Log(fmt.Sprintf("Not equal: \n"+
+				t.Logf("Not equal: \n"+
 					"expected: %v\n"+
-					"actual  : %v", tt.want, got))
+					"actual  : %v", tt.want, got)
 				t.FailNow()
 			}
 		})
@@ -159,10 +180,10 @@ func TestOverlaps(t *testing.T) {
 }
 
 func requireEqualBounds[T comparable](t *testing.T, want, got []Bound[T]) {
-	if !slices.EqualFunc(want, got, IsBoundEqual[T]) {
-		t.Log(fmt.Sprintf("Not equal: \n"+
+	if !slices.Equal(want, got) {
+		t.Logf("Not equal: \n"+
 			"expected: %v\n"+
-			"actual  : %v", strBounds(want), strBounds(got)))
+			"actual  : %v", strBounds(want), strBounds(got))
 		t.FailNow()
 	}
 }
@@ -184,14 +205,10 @@ func strBounds[T any](b []Bound[T]) string {
 
 func requireEqualBound[T comparable](t *testing.T, want, got Bound[T]) {
 	t.Helper()
-	if !IsBoundEqual(want, got) {
-		t.Log(fmt.Sprintf("Not equal: \n"+
+	if want != got {
+		t.Logf("Not equal: \n"+
 			"expected: %v\n"+
-			"actual  : %v", want, got))
+			"actual  : %v", want, got)
 		t.FailNow()
 	}
-}
-
-func compareBound[T comparable](want, got Bound[T]) func(*testing.T) {
-	return func(t *testing.T) { t.Helper(); requireEqualBound(t, want, got) }
 }

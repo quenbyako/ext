@@ -206,16 +206,34 @@ func SortCmp[S ~[]E, E cmp.Cmp[E]](x S) S {
 	return SortFunc(x, func(a, b E) int { return a.Cmp(b) })
 }
 
-func Repeat[S ~[]E, E any](s S, times int) S {
-	if len(s) == 0 {
-		return S{}
+func Repeat[T any](times int, s ...T) []T {
+	if len(s) == 0 || times <= 0 {
+		return []T{}
 	}
 
-	res := make(S, times*len(s))
+	res := make([]T, times*len(s))
 	for i := range times {
 		n, m := i*len(s), (i+1)*len(s)
 		copy(res[n:m], s)
 	}
 
 	return res
+}
+
+// Batch batches []E into [][]E in groups of size. The final chunk of []E will be
+// smaller than size if the input slice cannot be chunked evenly. It does not
+// make any copies of slice elements.
+//
+// As an example, take a slice of 5 integers and create chunks of 2 integers
+// each (the final value creates a short chunk):
+//
+//	slices.Batch([]int{1, 2, 3, 4, 5}, 2) = [][]int{{1, 2}, {3, 4}, {5}}
+func Batch[S ~[]E, E any](s S, size int) (batches []S) {
+	batches = make([]S, 0, (len(s)+size-1)/size)
+
+	for size < len(s) {
+		s, batches = s[size:], append(batches, s[0:size:size])
+	}
+
+	return append(batches, s)
 }

@@ -12,7 +12,7 @@ type Edge[T any] struct {
 
 func newEdge[T any](v T, i bool) Edge[T] { return Edge[T]{Value: v, Included: i} }
 
-func IsEdgeNear[T any](next func(T) T, cmp func(T, T) int, lower, higher Edge[T]) bool {
+func IsEdgeNear[T any](next nextFunc[T], cmp compareFunc[T], lower, higher Edge[T]) bool {
 	// cases:
 	// * [1:2] [2:3]
 	// * [1:2) [2:3]
@@ -33,7 +33,7 @@ func IsEdgeNear[T any](next func(T) T, cmp func(T, T) int, lower, higher Edge[T]
 	// * [1:2) (3:4] // missed 2 and 3
 	//
 	// checks ONLY if next function is provided
-	if next != nil && lower.Included && higher.Included && cmp(next(lower.Value), higher.Value) >= 0 {
+	if next != nil && lower.Included && higher.Included && cmp(next(lower.Value, higher.Value), higher.Value) >= 0 {
 		return true
 	}
 
