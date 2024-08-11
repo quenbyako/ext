@@ -1,0 +1,24 @@
+﻿version: "3"
+
+vars:
+  PUBLISHED_PACKAGES:
+    - fs
+    - maps
+    - set
+    - slices
+    - span
+    - user
+
+tasks:
+  docs:
+    sources:
+      - "**/*.go"
+    generates:
+      - "**/README.md"
+    cmds:
+      - for: { var: PUBLISHED_PACKAGES, as: PKG }
+        cmd: gomarkdoc ./{{ .PKG }} > {{ .PKG }}/README.md
+
+  docs:clean:
+    cmds:
+      - rm -rf ./*/README.md
