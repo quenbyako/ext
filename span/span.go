@@ -356,44 +356,10 @@ func (s span[T]) search(t T) (int, bool) {
 	return slices.BinarySearchFunc(s.bounds, t, func(a Bound[T], b T) int { return a.Position(s.cmp, b) })
 }
 
-// func (s span[T]) Search(value T) Position {
-// 	if len(s.bounds) == 0 {
-// 		return PositionNowhere{}
-// 	} else if i, ok := s.search(value); ok {
-// 		return PositionExact(i)
-// 	} else if i == 0 {
-// 		return PositionLower{}
-// 	} else if i == len(s.bounds) {
-// 		return PositionHigher{}
-// 	} else {
-// 		return PositionBetween{Lo: i - 1, Hi: i}
-// 	}
-// }
-
-// type Position interface{ _Position() }
-//
-// type PositionNowhere struct{}
-// type PositionHigher struct{}
-// type PositionLower struct{}
-// type PositionExact int
-// type PositionBetween struct{ Lo, Hi int }
-//
-// func (PositionNowhere) _Position()       {}
-// func (PositionNowhere) String() string   { return "PositionNowhere{}" }
-// func (PositionHigher) _Position()        {}
-// func (PositionHigher) String() string    { return "PositionHigher{}" }
-// func (PositionLower) _Position()         {}
-// func (PositionLower) String() string     { return "PositionLower{}" }
-// func (PositionExact) _Position()         {}
-// func (p PositionExact) String() string   { return fmt.Sprintf("PositionExact{%v}", int(p)) }
-// func (PositionBetween) _Position()       {}
-// func (p PositionBetween) String() string { return fmt.Sprintf("PositionBetween{%v : %v}", p.Lo, p.Hi) }
-
-func (s span[T]) String() string { return joinStringer(s.bounds, "") }
+func (s span[T]) String() string { return fmt.Sprintf("%v", s) }
 
 func (s span[T]) Format(f fmt.State, verb rune) {
-	flags := string(slices.Filter([]rune("-+# 0"), func(r rune) bool { return f.Flag(int(r)) }))
-	fmtValue := "%" + flags + string(verb)
+	fmtValue := fmt.FormatString(f, verb)
 
 	for _, b := range s.bounds {
 		fmt.Fprintf(f, fmtValue, b)

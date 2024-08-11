@@ -5,119 +5,192 @@
 // between the start and the end of the operation.
 package set
 
-import (
-	"fmt"
-	"strings"
-)
-
 // Set is describing a Set. Sets are an unordered, unique list of values.
 type Set[T any] interface {
 	Add(items ...T) Set[T]
-	Remove(items ...T) Set[T]
-	Pop() (T, bool)
-	Has(items ...T) bool
-	// Size returns the number of items in a set.
-	Size() int
-	// Clear removes all items from the set.
-	Clear()
-	// IsEmpty reports whether the Set is empty.
-	IsEmpty() bool
-	// IsEqual test whether s and t are the same in size and have the same
-	// items.
-	IsEqual(s Set[T]) bool
-	IsSubset(s Set[T]) bool
-	IsSuperset(s Set[T]) bool
-	// Each traverses the items in the Set, calling the provided function for
-	// each set member. Traversal will continue until all items in the Set have
-	// been visited, or if the closure returns false.
-	Each(func(T) bool) bool
-	String() string
-	List() []T
-	// Copy returns a new Set with a copy of s.
-	Copy() Set[T]
-	// Merge is like Union, however it modifies the current set it's applied on
-	// with the given t set.
-	Merge(s Set[T]) Set[T]
-	Separate(s Set[T]) Set[T]
+	Del(items ...T) Set[T]
+
+	// Has looks for the existence of items passed. It returns false if nothing
+	// is passed. For multiple items it returns true only if all of  the items
+	// exist.
+	Has(items T) bool
+	Len() int
+
+	// Each traverses the items in the Set, calling the provided function for each
+	// set member. Traversal will continue until all items in the Set have been
+	// visited, or if the closure returns false.
+	Each(yield func(T) bool)
 }
 
-// helpful to not write everywhere struct{}{}
 type null = struct{}
 
-// New creates and initalizes a new Set interface. Its single parameter
+// New creates and initializes a new Set interface. Its single parameter
 // denotes the type of set to create. Either ThreadSafe or
 // NonThreadSafe. The default is ThreadSafe.
-func New[T comparable](items ...T) Set[T]  { return newNonTS(items...) }
+func New[T comparable](items ...T) Set[T] { return newNonTS(items...) }
+
+// NewTS creates and initializes a new Set with thread safety. The type must
+// implement the [Hashable] interface.
+//
+// The behavior of thread safe version is equal to [sync.Map].
+func NewTS[T Hashable](items ...T) Set[T] { return newTS(items...) }
+
+// NewAny creates and initializes a new Set with any type of values. The
+// type must implement the [Hashable] interface.
 func NewAny[T Hashable](items ...T) Set[T] { return newAnyNonTS(items...) }
 
-// Union is the merger of multiple sets. It returns a new set with all the
-// elements present in all the sets that are passed.
+// Pop  deletes and return an item from the set. The underlying Set s is
+// modified. If set is empty, nil is returned.
 //
-// The dynamic type of the returned set is determined by the first passed set's
-// implementation of the New() method.
-func Union[T any](set1, set2 Set[T], sets ...Set[T]) Set[T] {
-	u := set1.Copy()
-	set2.Each(func(item T) bool {
-		u.Add(item)
+//nolint:ireturn,nonamedreturns // generic is not means that it's an interface
+func Pop[T any](s Set[T]) (t T, ok bool) {
+	s.Each(func(item T) bool {
+		s.Del(t)
+		t, ok = item, true
+
+		return false
+	})
+
+	return t, ok
+}
+
+// Clone returns a new Set with the same items. The underlying Set s is not
+// modified.
+//
+//nolint:varnamelen // logically reasonable
+func Clone[T comparable](s Set[T]) Set[T] {
+	c := make(set[T], s.Len())
+	s.Each(func(t T) bool {
+		c.Add(t)
+
 		return true
 	})
-	for _, set := range sets {
-		set.Each(func(item T) bool {
-			u.Add(item)
+
+	return c
+}
+
+// IsEqual tests whether a and b are equal by containing same items.
+//
+//nolint:varnamelen
+func IsEqual[T any](a, b Set[T]) bool {
+	if a.Len() != b.Len() {
+		return false
+	}
+
+	ok := true
+
+	a.Each(func(item T) bool {
+		if !b.Has(item) {
+			ok = false
+		}
+
+		return ok
+	})
+
+	return ok
+}
+
+// IsSubset tests whether b is a subset of a.
+//
+//nolint:varnamelen
+func IsSubset[T any](a, b Set[T]) bool {
+	if a.Len() < b.Len() {
+		return false
+	}
+
+	ok := true
+
+	b.Each(func(item T) bool {
+		if !a.Has(item) {
+			ok = false
+		}
+
+		return ok
+	})
+
+	return ok
+}
+
+// IsSuperset tests whether b is a superset of a.
+func IsSuperset[T any](a, b Set[T]) bool { return IsSubset(b, a) }
+
+// List returns a slice of all items. There is also StringSlice() and
+// IntSlice() methods for returning slices of type string or int.
+//
+
+func AsList[T any](s Set[T]) []T {
+	list := make([]T, 0, s.Len())
+
+	s.Each(func(item T) bool {
+		list = append(list, item)
+
+		return true
+	})
+
+	return list
+}
+
+// Union adds all items from t to s. The underlying Set a is modified.
+//
+//nolint:varnamelen // logically reasonable
+func Union[T any](a Set[T], b ...Set[T]) Set[T] {
+	for _, b := range b {
+		b.Each(func(item T) bool {
+			a.Add(item)
+
 			return true
 		})
 	}
 
-	return u
+	return a
 }
 
-// Difference returns a new set which contains items which are in in the first
-// set but not in the others. Unlike the Difference() method you can use this
-// function separately with multiple sets.
-func Difference[T any](set1, set2 Set[T], sets ...Set[T]) Set[T] {
-	s := set1.Copy()
-	s.Separate(set2)
-	for _, set := range sets {
-		s.Separate(set) // seperate is thread safe
-	}
-	return s
-}
-
-// Intersection returns a new set which contains items that only exist in all given sets.
-func Intersection[T any](set1, set2 Set[T], sets ...Set[T]) Set[T] {
-	all := Union(set1, set2, sets...)
-	result := Union(set1, set2, sets...)
-
-	all.Each(func(item T) bool {
-		if !set1.Has(item) || !set2.Has(item) {
-			result.Remove(item)
-		}
-
-		for _, set := range sets {
-			if !set.Has(item) {
-				result.Remove(item)
+// Intersection returns a new Set with items that are in both a and b.
+//
+//nolint:varnamelen // logically reasonable
+func Intersection[T any](a Set[T], b ...Set[T]) Set[T] {
+	for _, b := range b {
+		a.Each(func(item T) bool {
+			if !b.Has(item) {
+				a.Del(item)
 			}
+
+			return true
+		})
+	}
+
+	return a
+}
+
+// Difference returns a new Set with items that are in a but not in b.
+//
+//nolint:varnamelen // logically reasonable
+func Difference[T any](a Set[T], b ...Set[T]) Set[T] {
+	for _, b := range b {
+		b.Each(func(item T) bool {
+			a.Del(item)
+
+			return true
+		})
+	}
+
+	return a
+}
+
+// SymmetricDifference returns a new Set with items that are in either a or b,
+// but not in both.
+//
+//nolint:varnamelen
+func SymmetricDifference[T any](a, b Set[T]) Set[T] {
+	b.Each(func(item T) bool {
+		if a.Has(item) {
+			a.Del(item)
+		} else {
+			a.Add(item)
 		}
+
 		return true
 	})
-	return result
-}
 
-// SymmetricDifference returns a new set which s is the difference of items which are in
-// one of either, but not in both.
-func SymmetricDifference[T any](s, t Set[T]) Set[T] {
-	u := Difference(s, t)
-	v := Difference(t, s)
-	return Union(u, v)
-}
-
-func stringSet[T any](s Set[T]) string {
-	l := s.List()
-	t := make([]string, 0, len(l))
-	for _, item := range l {
-
-		t = append(t, fmt.Sprintf("%v", item))
-	}
-
-	return fmt.Sprintf("set[%s]", strings.Join(t, ", "))
+	return a
 }
