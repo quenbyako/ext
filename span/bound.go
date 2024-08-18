@@ -120,7 +120,7 @@ func NewBound[T cmp.Ordered](loIncluded bool, lo, hi T, hiIncluded bool) Bound[T
 }
 
 func NewBoundEdges[T cmp.Ordered](lo, hi Edge[T]) Bound[T] {
-	return NewBoundEdgesFunc(lo, hi, cmp.Compare)
+	return NewBoundEdgesFunc(lo, hi, compare[T])
 }
 
 // The implementation guarantees, that `cmp` function will be called AT MOST 4

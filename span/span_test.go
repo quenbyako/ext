@@ -14,7 +14,7 @@ import (
 	. "github.com/quenbyako/ext/span"
 )
 
-func s(b ...Bound[rune]) Span[rune]      { return New(Next[rune], cmp.Compare, b...) }
+func s(b ...Bound[rune]) Span[rune]      { return New(Next[rune], cmp.Compare[rune], b...) }
 func b[T cmp.Ordered](lo, hi T) Bound[T] { return NewBoundII(lo, hi) }
 func r[T cmp.Ordered](r T) Bound[T]      { return NewBoundII(r, r) }
 
@@ -149,7 +149,7 @@ func TestMakeStrictBounds(t *testing.T) {
 		// * cuts invalid bounds,
 		{NewRune(Bound[rune]{Edge[rune]{Value: 1, Included: false}, Edge[rune]{Value: 2, Included: false}}), span.NewRune()},
 	} {
-		t.Run("", compareSpan(tt.want, MakeStrictBounds(tt.in, cmp.Compare, Next)))
+		t.Run("", compareSpan(tt.want, MakeStrictBounds(tt.in, cmp.Compare[rune], Next[rune])))
 	}
 }
 

@@ -78,7 +78,7 @@ func TestContains(t *testing.T) {
 		{bii(math.SmallestNonzeroFloat64, 1), bf("(0:1]"), false},
 	} {
 		t.Run("", func(t *testing.T) {
-			if got := tt.a.Contains(cmp.Compare, tt.b); tt.want != got {
+			if got := tt.a.Contains(Compare[ttype], tt.b); tt.want != got {
 				t.Logf("Not equal: \n"+
 					"expected: %v\n"+
 					"actual  : %v", tt.want, got)
@@ -100,7 +100,7 @@ func TestPosition(t *testing.T) {
 		{bf("[0:1]"), 0, 0},
 		{bii(-1, -math.SmallestNonzeroFloat64), 0, -1},
 	} {
-		t.Run("", compare(tt.want, tt.a.Position(cmp.Compare, tt.v)))
+		t.Run("", compare(tt.want, tt.a.Position(Compare[ttype], tt.v)))
 	}
 }
 
@@ -114,7 +114,7 @@ func TestUnion(t *testing.T) {
 		{bf("[-1:0]"), bii(math.SmallestNonzeroFloat64, 1), bf("[-1:0]"), false},
 	} {
 		t.Run("", func(t *testing.T) {
-			got, gotOK := UnionBounds(nil, cmp.Compare, tt.a, tt.b)
+			got, gotOK := UnionBounds(nil, Compare[ttype], tt.a, tt.b)
 			requireEqualBound(t, tt.want, got)
 			requireEqual(t, tt.wantOK, gotOK)
 		})
@@ -147,7 +147,7 @@ func TestDifference(t *testing.T) {
 		{"#17", bf("[1:1]"), bf("[1:3]"), nil},
 		{"#18", bf("[1:1]"), bf("[1:1]"), nil},
 	} {
-		t.Run("", compareBounds(tt.want, tt.a.Difference(cmp.Compare, tt.b)))
+		t.Run("", compareBounds(tt.want, tt.a.Difference(Compare[ttype], tt.b)))
 	}
 }
 
@@ -169,7 +169,7 @@ func TestOverlaps(t *testing.T) {
 		{bf("(0:1]"), bf("[1:1]"), true},
 	} {
 		t.Run("", func(t *testing.T) {
-			if got := tt.a.Overlaps(cmp.Compare, tt.b); tt.want != got {
+			if got := tt.a.Overlaps(Compare[ttype], tt.b); tt.want != got {
 				t.Logf("Not equal: \n"+
 					"expected: %v\n"+
 					"actual  : %v", tt.want, got)

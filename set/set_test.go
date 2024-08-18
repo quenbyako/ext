@@ -144,11 +144,11 @@ func BenchmarkIntersection(b *testing.B) {
 	} {
 		s1, s2 := New[int](), New[int]()
 
-		for i := range n / 2 {
+		for i := 0; i < n/2; i++ {
 			s1.Add(i)
 		}
 
-		for i := range n {
+		for i := 0; i < n; i++ {
 			s2.Add(i)
 		}
 

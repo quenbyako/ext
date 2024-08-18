@@ -8,10 +8,6 @@
 // floating-point numbers containing NaN values.
 package slices
 
-import (
-	"github.com/quenbyako/ext/cmp"
-)
-
 func ToMap[S ~[]T, T comparable](s S) map[T]struct{} {
 	res := make(map[T]struct{})
 	for _, item := range s {
@@ -21,16 +17,8 @@ func ToMap[S ~[]T, T comparable](s S) map[T]struct{} {
 	return res
 }
 
-func IndexEq[S ~[]T, T cmp.Eq[T]](s S, v T) int {
-	return IndexFunc(s, func(i T) bool { return i.Eq(v) })
-}
-
 func IndexLast[S ~[]T, T comparable](s S, v T) int {
 	return IndexLastFunc(s, func(item T) bool { return item == v })
-}
-
-func IndexLastEq[S ~[]T, T cmp.Eq[T]](s S, v T) int {
-	return IndexLastFunc(s, func(i T) bool { return i.Eq(v) })
 }
 
 func IndexLastFunc[S ~[]T, T any](s S, f func(T) bool) int {
@@ -41,13 +29,6 @@ func IndexLastFunc[S ~[]T, T any](s S, f func(T) bool) int {
 	}
 
 	return -1
-}
-
-// Contains reports whether v is present in s.
-func ContainsEq[S ~[]T, T cmp.Eq[T]](s S, v T) bool { return IndexEq(s, v) >= 0 }
-
-func CompactEq[S ~[]T, T cmp.Eq[T]](s S) S {
-	return CompactFunc(s, func(a, b T) bool { return a.Eq(b) })
 }
 
 func Remap[S ~[]E, E, T any](s S, f func(E) T) []T {
@@ -95,30 +76,9 @@ func Possibles[S ~[]T, T any](s []S) (res []S) {
 	return res
 }
 
-// Concat returns a new slice concatenating the passed in slices.
-func Concat[S ~[]E, E any](slices ...S) S {
-	// TODO: replace for std.Concat(slices...) in 1.22
-	size := 0
-	for _, s := range slices {
-		size += len(s)
-		if size < 0 {
-			panic("len out of range")
-		}
-	}
-	newslice := Grow[S](nil, size)
-	for _, s := range slices {
-		newslice = append(newslice, s...)
-	}
-	return newslice
-}
-
 // GentlyAppend добавляет
 func GentlyAppend[S ~[]T, T comparable](s S, items ...T) S {
 	return GentlyAppendFunc(s, func(a, b T) bool { return a == b }, items...)
-}
-
-func GentlyAppendEq[S ~[]T, T cmp.Eq[T]](s S, items ...T) S {
-	return GentlyAppendFunc(s, cmp.Equal[T], items...)
 }
 
 func GentlyAppendFunc[S ~[]T, T any](s S, f func(T, T) bool, items ...T) S {
@@ -143,12 +103,6 @@ func Filter[S ~[]T, T any](s S, f func(T) bool) S {
 	}
 
 	return Clip(s[:i])
-}
-
-// AddSorted inserts items into sorted slice. This could be useful for partly
-// ordered sets, but, if you need real set, use this type from other package.
-func AddSorted[S ~[]T, T cmp.Ordered](s S, items ...T) S {
-	return AddSortedFunc(s, cmp.Compare, items...)
 }
 
 // AddSorted inserts items of any type into sorted slice. This could be useful
@@ -200,40 +154,4 @@ func IsUniqueFunc[S ~[]E, E any](s S, eq func(E) bool) bool {
 	}
 
 	return false
-}
-
-func SortCmp[S ~[]E, E cmp.Cmp[E]](x S) S {
-	return SortFunc(x, func(a, b E) int { return a.Cmp(b) })
-}
-
-func Repeat[T any](times int, s ...T) []T {
-	if len(s) == 0 || times <= 0 {
-		return []T{}
-	}
-
-	res := make([]T, times*len(s))
-	for i := range times {
-		n, m := i*len(s), (i+1)*len(s)
-		copy(res[n:m], s)
-	}
-
-	return res
-}
-
-// Batch batches []E into [][]E in groups of size. The final chunk of []E will be
-// smaller than size if the input slice cannot be chunked evenly. It does not
-// make any copies of slice elements.
-//
-// As an example, take a slice of 5 integers and create chunks of 2 integers
-// each (the final value creates a short chunk):
-//
-//	slices.Batch([]int{1, 2, 3, 4, 5}, 2) = [][]int{{1, 2}, {3, 4}, {5}}
-func Batch[S ~[]E, E any](s S, size int) (batches []S) {
-	batches = make([]S, 0, (len(s)+size-1)/size)
-
-	for size < len(s) {
-		s, batches = s[size:], append(batches, s[0:size:size])
-	}
-
-	return append(batches, s)
 }
