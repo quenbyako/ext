@@ -98,29 +98,70 @@ type span[T any] struct {
 	bounds []Bound[T]
 }
 
-func NewInt(b ...Bound[int]) Span[int]             { return New(nextInt, cmp.Compare, b...) }
-func NewInt8(b ...Bound[int8]) Span[int8]          { return New(nextInt, cmp.Compare, b...) }
-func NewInt16(b ...Bound[int16]) Span[int16]       { return New(nextInt, cmp.Compare, b...) }
-func NewInt32(b ...Bound[int32]) Span[int32]       { return New(nextInt, cmp.Compare, b...) }
-func NewInt64(b ...Bound[int64]) Span[int64]       { return New(nextInt, cmp.Compare, b...) }
-func NewUint(b ...Bound[uint]) Span[uint]          { return New(nextInt, cmp.Compare, b...) }
-func NewUint8(b ...Bound[uint8]) Span[uint8]       { return New(nextInt, cmp.Compare, b...) }
-func NewUint16(b ...Bound[uint16]) Span[uint16]    { return New(nextInt, cmp.Compare, b...) }
-func NewUint32(b ...Bound[uint32]) Span[uint32]    { return New(nextInt, cmp.Compare, b...) }
-func NewUint64(b ...Bound[uint64]) Span[uint64]    { return New(nextInt, cmp.Compare, b...) }
-func NewFloat32(b ...Bound[float32]) Span[float32] { return New(math.Nextafter32, cmp.Compare, b...) }
-func NewFloat64(b ...Bound[float64]) Span[float64] { return New(math.Nextafter, cmp.Compare, b...) }
-func NewByte(b ...Bound[byte]) Span[byte]          { return New(nextInt, cmp.Compare, b...) }
-func NewRune(b ...Bound[rune]) Span[rune]          { return New(nextInt, cmp.Compare, b...) }
+func NewInt(b ...Bound[int]) Span[int] {
+	return New(nextInt[int], cmp.Compare[int], b...)
+}
+
+func NewInt8(b ...Bound[int8]) Span[int8] {
+	return New(nextInt[int8], cmp.Compare[int8], b...)
+}
+
+func NewInt16(b ...Bound[int16]) Span[int16] {
+	return New(nextInt[int16], cmp.Compare[int16], b...)
+}
+
+func NewInt32(b ...Bound[int32]) Span[int32] {
+	return New(nextInt[int32], cmp.Compare[int32], b...)
+}
+
+func NewInt64(b ...Bound[int64]) Span[int64] {
+	return New(nextInt[int64], cmp.Compare[int64], b...)
+}
+
+func NewUint(b ...Bound[uint]) Span[uint] {
+	return New(nextInt[uint], cmp.Compare[uint], b...)
+}
+
+func NewUint8(b ...Bound[uint8]) Span[uint8] {
+	return New(nextInt[uint8], cmp.Compare[uint8], b...)
+}
+
+func NewUint16(b ...Bound[uint16]) Span[uint16] {
+	return New(nextInt[uint16], cmp.Compare[uint16], b...)
+}
+
+func NewUint32(b ...Bound[uint32]) Span[uint32] {
+	return New(nextInt[uint32], cmp.Compare[uint32], b...)
+}
+
+func NewUint64(b ...Bound[uint64]) Span[uint64] {
+	return New(nextInt[uint64], cmp.Compare[uint64], b...)
+}
+
+func NewFloat32(b ...Bound[float32]) Span[float32] {
+	return New(math.Nextafter32, cmp.Compare[float32], b...)
+}
+
+func NewFloat64(b ...Bound[float64]) Span[float64] {
+	return New(math.Nextafter, cmp.Compare[float64], b...)
+}
+
+func NewByte(b ...Bound[byte]) Span[byte] {
+	return New(nextInt[byte], cmp.Compare[byte], b...)
+}
+
+func NewRune(b ...Bound[rune]) Span[rune] {
+	return New(nextInt[rune], cmp.Compare[rune], b...)
+}
 
 // TODO: implement nextString in a correct way.
 //
-// Current problem is that we can get next value fomr nextString, but we can't
+// Current problem is that we can get next value form nextString, but we can't
 // do it for previous string value.
 //
 // Even though, it's worthless right now to spend so much time on this, because
 // there are soooooo tiny amount of cases, when we need to use string as a span.
-func _NewString(b ...Bound[string]) Span[string] { return New(nextString, cmp.Compare, b...) }
+func _NewString(b ...Bound[string]) Span[string] { return New(nextString, cmp.Compare[string], b...) }
 
 // just to tell staticcheck that we are using this function in the future
 var _ = _NewString
@@ -227,7 +268,7 @@ func ToBasicBounds[T any](s ...Bound[T]) [][2]Edge[T] {
 }
 
 func FromBasicOrdered[T cmp.Ordered](s [][2]T) Span[T] {
-	return New(nil, cmp.Compare, slices.Remap(s, func(b [2]T) Bound[T] { return NewBound(true, b[0], b[1], true) })...)
+	return New(nil, compare[T], slices.Remap(s, func(b [2]T) Bound[T] { return NewBound(true, b[0], b[1], true) })...)
 }
 
 // MakeStrictBounds creates a new span with the given bounds, ensuring that all

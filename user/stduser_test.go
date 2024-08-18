@@ -8,9 +8,8 @@ package user
 import (
 	"os"
 	"reflect"
+	"slices"
 	"testing"
-
-	"github.com/quenbyako/ext/slices"
 )
 
 func TestResolveHomedir(t *testing.T) {
