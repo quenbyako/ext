@@ -29,26 +29,26 @@ func Test_Union(t *testing.T) {
 	}
 }
 
-func Test_Difference(t *testing.T) {
+func Test_Subtract(t *testing.T) {
 	t.Parallel()
 
 	s := New("1", "2", "3")
 	r := New("3", "4", "5")
 	x := New("5", "6", "7")
 
-	u := Difference(s, r, x)
+	u := Subtract(s, r, x)
 
 	if u.Len() != 2 {
-		t.Error("Difference: the set doesn't have all items in it.")
+		t.Error("Subtract: the set doesn't have all items in it.")
 	}
 
 	if !u.Has("1") || !u.Has("2") {
-		t.Error("Difference: items are not availabile in the set.")
+		t.Error("Subtract: items are not availabile in the set.")
 	}
 
-	y := Difference(r, r)
+	y := Subtract(r, r)
 	if y.Len() != 0 {
-		t.Error("Difference: size should be zero")
+		t.Error("Subtract: size should be zero")
 	}
 }
 

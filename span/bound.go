@@ -13,11 +13,12 @@ import (
 )
 
 type nextFunc[T any] func(T, T) T
-type compareFunc[T any] func(T, T) int
+
+type cmpFunc[T any] func(T, T) int
 
 // returns new bound, if bounds overlaps and it's possible to merge.
 // Otherwise, returns copy of current bound and false.
-func UnionBounds[T any](next nextFunc[T], cmp compareFunc[T], a, b Bound[T]) (Bound[T], bool) {
+func UnionBounds[T any](next nextFunc[T], cmp cmpFunc[T], a, b Bound[T]) (Bound[T], bool) {
 	if a.Contains(cmp, b) {
 		return NewBoundEdgesFunc(a.Lo, a.Hi, cmp), true
 	} else if b.Contains(cmp, a) {
@@ -38,22 +39,22 @@ func UnionBounds[T any](next nextFunc[T], cmp compareFunc[T], a, b Bound[T]) (Bo
 		//    (example: [1:2] >< [3:4] -> [1:4]. This is example only for int,
 		//    for float the smallest possible value is added)
 		switch {
-		case cmp(ahi.Value, blo.Value) <= 0 && IsEdgeNear(next, cmp, ahi, blo): // left join
+		case cmp(ahi.Value, blo.Value) <= 0 && areEdgesAdjacent(next, cmp, ahi, blo): // left join
 			return NewBoundEdgesFunc(alo, bhi, cmp), true
-		case cmp(bhi.Value, alo.Value) <= 0 && IsEdgeNear(next, cmp, bhi, alo): // right join
+		case cmp(bhi.Value, alo.Value) <= 0 && areEdgesAdjacent(next, cmp, bhi, alo): // right join
 			return NewBoundEdgesFunc(blo, ahi, cmp), true
 		default: // all other  cases
 			return a, false
 		}
 	}
 
-	lo, hi := minEdge(alo, blo, cmp), maxEdge(ahi, bhi, cmp)
+	lo, hi := minLoEdge(alo, blo, cmp), maxHiEdge(ahi, bhi, cmp)
 
 	// now it overlaps by part, so bound must be modified
 	return NewBoundEdgesFunc(lo, hi, cmp), true
 }
 
-// принцип имплементации всех баундов:
+// General idea of implementation for all Bound methods:
 //
 // так как мы хотим сделать баунды для любых типов (от time.Time, до нод в
 // kubernetes), нам нужно иметь функцию cmp, сравнивающую значения.
@@ -125,7 +126,7 @@ func NewBoundEdges[T cmp.Ordered](lo, hi Edge[T]) Bound[T] {
 
 // The implementation guarantees, that `cmp` function will be called AT MOST 4
 // times for each method call.
-func NewBoundEdgesFunc[T any](lo, hi Edge[T], cmp compareFunc[T]) Bound[T] {
+func NewBoundEdgesFunc[T any](lo, hi Edge[T], cmp cmpFunc[T]) Bound[T] {
 	if cmp == nil {
 		panic("cmp function is nil")
 	} else if compared := cmp(lo.Value, hi.Value); compared > 0 {
@@ -137,8 +138,7 @@ func NewBoundEdgesFunc[T any](lo, hi Edge[T], cmp compareFunc[T]) Bound[T] {
 	return Bound[T]{Lo: lo, Hi: hi}
 }
 
-func (a Bound[T]) Contains(cmp compareFunc[T], b Bound[T]) bool {
-
+func (a Bound[T]) Contains(cmp cmpFunc[T], b Bound[T]) bool {
 	locmp := cmp(a.Lo.Value, b.Lo.Value)
 	hicmp := cmp(a.Hi.Value, b.Hi.Value)
 
@@ -150,7 +150,7 @@ func (a Bound[T]) Contains(cmp compareFunc[T], b Bound[T]) bool {
 	return startWithinA && endWithinA
 }
 
-func (a Bound[T]) Overlaps(cmp compareFunc[T], b Bound[T]) bool {
+func (a Bound[T]) Overlaps(cmp cmpFunc[T], b Bound[T]) bool {
 	lohicmp := cmp(a.Lo.Value, b.Hi.Value)
 	hilocmp := cmp(a.Hi.Value, b.Lo.Value)
 
@@ -161,7 +161,7 @@ func (a Bound[T]) Overlaps(cmp compareFunc[T], b Bound[T]) bool {
 
 }
 
-func (x Bound[T]) Position(cmp compareFunc[T], i T) int {
+func (x Bound[T]) Position(cmp cmpFunc[T], i T) int {
 	locmp := cmp(x.Lo.Value, i)
 	hicmp := cmp(x.Hi.Value, i)
 
@@ -174,7 +174,11 @@ func (x Bound[T]) Position(cmp compareFunc[T], i T) int {
 	}
 }
 
-func (a Bound[T]) Difference(cmp compareFunc[T], b Bound[T]) (res []Bound[T]) {
+// Subtract is a NOT boolean operation for `a NOT b`.
+//
+// TODO: appending is not optimized, we can calculate the size of the result
+// before appending.
+func (a Bound[T]) Subtract(cmp cmpFunc[T], b Bound[T]) (res []Bound[T]) {
 	blo, bhi := b.Lo, b.Hi
 
 	if b.Contains(cmp, a) {
@@ -204,6 +208,34 @@ func (a Bound[T]) Difference(cmp compareFunc[T], b Bound[T]) (res []Bound[T]) {
 	return res
 }
 
+func (x Bound[T]) Strict(cmp cmpFunc[T], next nextFunc[T]) Bound[T] {
+	if x.Lo.Included {
+		if x.Hi.Included {
+			return x
+		}
+
+		return Bound[T]{Lo: x.Lo, Hi: newEdge(next(x.Hi.Value, x.Lo.Value), true)}
+	}
+
+	if x.Hi.Included {
+		return Bound[T]{Lo: newEdge(next(x.Lo.Value, x.Hi.Value), true), Hi: x.Hi}
+	}
+
+	// both edges are not included
+	if cmp(x.Lo.Value, x.Hi.Value) == 0 {
+		panic("impossible bound")
+	}
+
+	lo := next(x.Lo.Value, x.Hi.Value)
+	hi := next(x.Hi.Value, x.Lo.Value)
+
+	if cmp(lo, hi) > 0 {
+		panic("impossible bound")
+	}
+
+	return Bound[T]{Lo: newEdge(lo, true), Hi: newEdge(hi, true)}
+}
+
 func (x Bound[T]) String() (res string) { return fmt.Sprintf("%v", x) }
 
 func (s Bound[T]) Format(f fmt.State, verb rune) {
@@ -224,4 +256,29 @@ func (s Bound[T]) Format(f fmt.State, verb rune) {
 	}
 
 	f.Write([]byte(buf))
+}
+
+// BoundsIntersect returns intersection of 2 bounds, and false, if there is no
+// intersection.
+//
+// Examples:
+//   - [1:3] ∩ [2:4] = [2:3]
+//   - (5:7) ∩ [1:9] = (5:7)
+func BoundsIntersect[T any](a, b Bound[T], cmp cmpFunc[T]) (res Bound[T], ok bool) {
+	compared := cmp(a.Hi.Value, b.Lo.Value)
+
+	// checks two edges into one bound if they intersect. Example:
+	//
+	//	    ---------hi]....
+	//		....[lo---------
+	//
+	//		returns true if edges intersect.
+	if compared > 0 || compared == 0 && a.Hi.Included && b.Lo.Included {
+		return Bound[T]{
+			Lo: maxLoEdge(a.Lo, b.Lo, cmp),
+			Hi: minHiEdge(a.Hi, b.Hi, cmp),
+		}, true
+	}
+
+	return Bound[T]{}, false
 }
