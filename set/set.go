@@ -43,15 +43,10 @@ func NewAny[T Hashable](items ...T) Set[T] { return newAnyNonTS(items...) }
 // modified. If set is empty, nil is returned.
 //
 //nolint:ireturn,nonamedreturns // generic is not means that it's an interface
-func Pop[T any](s Set[T]) (t T, ok bool) {
-	s.Each(func(item T) bool {
-		s.Del(t)
-		t, ok = item, true
+func Pop[T any](s Set[T]) (_ Set[T], t T, ok bool) {
+	s.Each(func(item T) bool { t, ok = item, true; return false })
 
-		return false
-	})
-
-	return t, ok
+	return s.Del(t), t, ok
 }
 
 // Clone returns a new Set with the same items. The underlying Set s is not
@@ -119,6 +114,10 @@ func IsSuperset[T any](a, b Set[T]) bool { return IsSubset(b, a) }
 //
 
 func AsList[T any](s Set[T]) []T {
+	if s == nil {
+		return []T{}
+	}
+
 	list := make([]T, 0, s.Len())
 
 	s.Each(func(item T) bool {
@@ -135,8 +134,12 @@ func AsList[T any](s Set[T]) []T {
 //nolint:varnamelen // logically reasonable
 func Union[T any](a Set[T], b ...Set[T]) Set[T] {
 	for _, b := range b {
+		if b == nil {
+			continue
+		}
+
 		b.Each(func(item T) bool {
-			a.Add(item)
+			a = a.Add(item)
 
 			return true
 		})
@@ -162,10 +165,10 @@ func Intersection[T any](a Set[T], b ...Set[T]) Set[T] {
 	return a
 }
 
-// Difference returns a new Set with items that are in a but not in b.
+// Subtract returns a new Set with items that are in a but not in b.
 //
 //nolint:varnamelen // logically reasonable
-func Difference[T any](a Set[T], b ...Set[T]) Set[T] {
+func Subtract[T any](a Set[T], b ...Set[T]) Set[T] {
 	for _, b := range b {
 		b.Each(func(item T) bool {
 			a.Del(item)

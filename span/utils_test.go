@@ -20,7 +20,7 @@ func S64(a ...Bound[float64]) Span[float64] {
 
 func Si(a ...Bound[int]) Span[int] {
 	return span[int]{
-		next:   Next[int],
+		next:   NextInt[int],
 		cmp:    cmp.Compare[int],
 		bounds: a,
 	}
@@ -28,20 +28,9 @@ func Si(a ...Bound[int]) Span[int] {
 
 func Sr(a ...Bound[rune]) Span[rune] {
 	return span[rune]{
-		next:   Next[rune],
+		next:   NextInt[rune],
 		cmp:    cmp.Compare[rune],
 		bounds: a,
-	}
-}
-
-func Next[T int | rune](v, t T) T {
-	switch {
-	case v == t:
-		return v
-	case v < t:
-		return v + 1
-	default:
-		return v - 1
 	}
 }
 

@@ -7,19 +7,22 @@ package span_test
 
 import (
 	"cmp"
+	"fmt"
+	"maps"
+	"slices"
 	"testing"
 	"unicode"
 
-	"github.com/quenbyako/ext/span"
 	. "github.com/quenbyako/ext/span"
 )
 
-func s(b ...Bound[rune]) Span[rune]      { return New(Next[rune], cmp.Compare[rune], b...) }
+func s(b ...Bound[rune]) Span[rune]      { return NewRune(b...) }
 func b[T cmp.Ordered](lo, hi T) Bound[T] { return NewBoundII(lo, hi) }
 func r[T cmp.Ordered](r T) Bound[T]      { return NewBoundII(r, r) }
 
 func TestSearch(t *testing.T) {
 	t.Skip()
+
 	for _, tt := range []struct {
 		// a    Span[rune]
 		// r    rune
@@ -35,8 +38,7 @@ func TestSearch(t *testing.T) {
 		// {Sr(b('0', '9'), b('a', 'z')), '@', PositionBetween{Lo: 0, Hi: 1}},
 	} {
 		t.Run("", func(t *testing.T) {
-			_ = tt
-			//	requireEqual(t, tt.want, tt.a.Search(tt.r))
+			_ = tt // requireEqual(t, tt.want, tt.a.Search(tt.r))
 		})
 	}
 }
@@ -80,13 +82,13 @@ func TestUnionSpans(t *testing.T) {
 	}
 }
 
-func TestDifferenceSpans(t *testing.T) {
+func TestSubtractSpans(t *testing.T) {
 	for _, tt := range []struct{ a, b, want Span[int] }{
 		{Si(bli("[1:6]")...), Si(bli("[2:4]")...), Si(bli("[1:2) (4:6]")...)},
 		{Si(bli("[1:6]")...), Si(bli("[2:2]")...), Si(bli("[1:2) (2:6]")...)},
 		{Si(bli("[1:3) [4:6]")...), Si(bli("[3:4]")...), Si(bli("[1:3) (4:6]")...)},
 	} {
-		t.Run("", compareSpan(tt.want, tt.a.Difference(tt.b)))
+		t.Run("", compareSpan(tt.want, tt.a.Subtract(tt.b)))
 	}
 }
 
@@ -147,9 +149,377 @@ func TestMakeStrictBounds(t *testing.T) {
 		// * MakeStrictBounds doesn't normalizing,
 		{sr("[1:2]", "[2:3]"), sr("[1:2]", "[2:3]")},
 		// * cuts invalid bounds,
-		{NewRune(Bound[rune]{Edge[rune]{Value: 1, Included: false}, Edge[rune]{Value: 2, Included: false}}), span.NewRune()},
+		{NewRune(Bound[rune]{Edge[rune]{Value: 1, Included: false}, Edge[rune]{Value: 2, Included: false}}), NewRune()},
 	} {
-		t.Run("", compareSpan(tt.want, MakeStrictBounds(tt.in, cmp.Compare[rune], Next[rune])))
+		t.Run("", compareSpan(tt.want, MakeStrictBounds(tt.in, cmp.Compare[rune], NextInt[rune])))
+	}
+}
+
+func TestSplit(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		in   []Span[rune]
+		want map[Bound[rune]][]int
+	}{{
+		//  0: Split([1:3][6:7], [2:3][5:6]) {
+		//        return {
+		//            [1:2) -> [0]
+		//            [2:3] -> [0, 1]
+		//            [5:6) -> [1]
+		//            [6:6] -> [0, 1]
+		//            (6:7] -> [0]
+		//        }
+		//     }
+		name: "0",
+		in:   []Span[rune]{sr("[1:3]", "[6:7]"), sr("[2:3]", "[5:6]")},
+		want: map[Bound[rune]][]int{
+			br("[1:2)"): {0},
+			br("[2:3]"): {0, 1},
+			br("[5:6)"): {1},
+			br("[6:6]"): {0, 1},
+			br("(6:7]"): {0},
+		},
+	}, {
+		//  1: Split([1:5], [2:4], [3:6]) {
+		//        return {
+		//            [1:2) -> [0]
+		//            [2:3) -> [0, 1]
+		//            [3:4] -> [0, 1, 2]
+		//            (4:5] -> [0, 2]
+		//            (5:6] -> [2]
+		//        }
+		//     }
+		name: "1",
+		in:   []Span[rune]{sr("[1:5]"), sr("[2:4]"), sr("[3:6]")},
+		want: map[Bound[rune]][]int{
+			br("[1:2)"): {0},
+			br("[2:3)"): {0, 1},
+			br("[3:4]"): {0, 1, 2},
+			br("(4:5]"): {0, 2},
+			br("(5:6]"): {2},
+		},
+	}, {
+		//  2: Split([1:3], [3:7)) {
+		//        return {
+		//            [1:3) -> [0]
+		//            [3:3] -> [0, 1]
+		//            (3:7) -> [1]
+		//        }
+		//     }
+		name: "2-collide",
+		in:   []Span[rune]{sr("[1:3]"), sr("[3:7]")},
+		want: map[Bound[rune]][]int{
+			br("[1:3)"): {0},
+			br("[3:3]"): {0, 1},
+			br("(3:7]"): {1},
+		},
+	}, {
+		//  2: Split([1:3), (3:7)) {
+		//        return {
+		//            [1:3) -> [0]
+		//            (3:7) -> [1]
+		//        }
+		//     }
+		name: "2-none",
+		in:   []Span[rune]{sr("[1:3)"), sr("(3:7]")},
+		want: map[Bound[rune]][]int{
+			br("[1:3)"): {0},
+			br("(3:7]"): {1},
+		},
+	}, {
+		//  2: Split([1:3), [3:7)) {
+		//        return {
+		//            [1:3] -> [0]
+		//            (3:7) -> [1]
+		//        }
+		//     }
+		name: "2-right-more",
+		in:   []Span[rune]{sr("[1:3)"), sr("[3:7]")},
+		want: map[Bound[rune]][]int{
+			br("[1:3)"): {0},
+			br("[3:7]"): {1},
+		},
+	}, {
+		//  2: Split([1:3], (3:7)) {
+		//        return {
+		//            [1:3] -> [0]
+		//            (3:7) -> [1]
+		//        }
+		//     }
+		name: "2-left-more",
+		in:   []Span[rune]{sr("[1:3]"), sr("(3:7]")},
+		want: map[Bound[rune]][]int{
+			br("[1:3]"): {0},
+			br("(3:7]"): {1},
+		},
+	}, {
+		//  3: Split([1:1], [2:2], [3:3]) {
+		//        return {
+		//            [1:1] -> [0]
+		//            [2:2] -> [1]
+		//            [3:3] -> [2]
+		//        }
+		//     }
+		name: "3",
+
+		in: []Span[rune]{sr("[1:1]"), sr("[2:2]"), sr("[3:3]")},
+		want: map[Bound[rune]][]int{
+			br("[1:1]"): {0},
+			br("[2:2]"): {1},
+			br("[3:3]"): {2},
+		},
+	}, {
+		//  4: Split([1:2), (2:3], [3:5]) {
+		//        return {
+		//           [1:2) -> [0]
+		//           (2:3) -> [1] // not exists
+		//           [3:3] -> [1,2]
+		//           (3:5] -> [2]
+		//       }
+		//     }
+		name: "4",
+		in:   []Span[rune]{sr("[1:2)"), sr("(2:3]"), sr("[3:5]")},
+		want: map[Bound[rune]][]int{
+			br("[1:2)"): {0},
+			// br("(2:3)"): {1}, // not exists
+			br("[3:3]"): {1, 2},
+			br("(3:5]"): {2},
+		},
+	}, {
+		//  5: Split([0:9], [0:0], [9:9]) {
+		//        return {
+		//            [0:0] -> [0, 1]
+		//            (0:9) -> [0]
+		//            [9:9] -> [0, 2]
+		//        }
+		//     }
+		name: "5",
+		in:   []Span[rune]{sr("[0:9]"), sr("[0:0]"), sr("[9:9]")},
+		want: map[Bound[rune]][]int{
+			br("[0:0]"): {0, 1},
+			br("(0:9)"): {0},
+			br("[9:9]"): {0, 2},
+		},
+	}, {
+		// 6: Split() {
+		//      return {}
+		// }
+		name: "6-none",
+		in:   []Span[rune]{},
+		want: map[Bound[rune]][]int{},
+	}, {
+		// 7: Split([1:2]) {
+		//      return {[1:2] -> [0]}
+		//}
+		name: "7-single",
+		in:   []Span[rune]{sr("[1:2]")},
+		want: map[Bound[rune]][]int{
+			br("[1:2]"): {0},
+		},
+	}, {
+		//  8: Split([0:1], [1:2], [2:3], [3:4], [4:5]) {
+		//        return {
+		//            [0:1) -> [0]
+		//            [1:1] -> [0, 1]
+		//            (1:2) -> [1] // not exists
+		//            [2:2] -> [1, 2]
+		//            (2:3) -> [2] // not exists
+		//            [3:3] -> [2, 3]
+		//            (3:4) -> [3] // not exists
+		//            [4:4] -> [3, 4]
+		//            (4:5] -> [4]
+		//        }
+		//     }
+		name: "8",
+		in:   []Span[rune]{sr("[0:1]"), sr("[1:2]"), sr("[2:3]"), sr("[3:4]"), sr("[4:5]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1)"): {0},
+			br("[1:1]"): {0, 1},
+			// br("(1:2)"): {1}, // not exists
+			br("[2:2]"): {1, 2},
+			// br("(2:3)"): {2}, // not exists
+			br("[3:3]"): {2, 3},
+			// br("(3:4)"): {3}, // not exists
+			br("[4:4]"): {3, 4},
+			br("(4:5]"): {4},
+		},
+	}, {
+		//  9: Split([0:2), [1:2], [0:4], [2:3], (2:4]) {
+		//        return {
+		//            [0:1) -> [0, 2]
+		//            [1:1] -> [0, 1, 2]
+		//            (1:2) -> [0, 1, 2]
+		//            [2:2] -> [1, 2, 3]
+		//            (2:3) -> [2, 3, 4]
+		//            [3:3] -> [2, 3, 4]
+		//            (3:4] -> [2, 4]
+		//        }
+		//     }
+		name: "9-all-together",
+		in:   []Span[rune]{sr("[0:2)"), sr("[1:2]"), sr("[0:4]"), sr("[2:3]"), sr("(2:4]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1)"): {0, 2},
+			br("[1:2)"): {0, 1, 2},
+			br("[2:2]"): {1, 2, 3},
+			br("(2:3]"): {2, 3, 4},
+			br("(3:4]"): {2, 4},
+		},
+	}, {
+		//  10: Split([0:2), [1:2], [0:4], [2:3], [2:4]) {
+		//        return {
+		//            [0:1) -> [0, 2]
+		//            [1:1] -> [0, 1, 2]
+		//            (1:2) -> [0, 1, 2]
+		//            [2:2] -> [1, 2, 3]
+		//            (2:3) -> [2, 3, 4]
+		//            [3:3] -> [2, 3, 4]
+		//            (3:4] -> [2, 4]
+		//        }
+		//     }
+		name: "10",
+		in:   []Span[rune]{sr("[0:2)"), sr("[1:2]"), sr("[0:4]"), sr("[2:3]"), sr("[2:4]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1)"): {0, 2},
+			br("[1:2)"): {0, 1, 2},
+			br("[2:2]"): {1, 2, 3, 4},
+			br("(2:3]"): {2, 3, 4},
+			br("(3:4]"): {2, 4},
+		},
+	}, {
+		name: "11",
+		in:   []Span[rune]{sr("(0:2)"), sr("[1:2]"), sr("(0:4]"), sr("(2:4]")},
+		want: map[Bound[rune]][]int{
+			// br("(0:1)"): {0, 2}, // not exists
+			br("[1:2)"): {0, 1, 2},
+			br("[2:2]"): {1, 2},
+			br("(2:4]"): {2, 3},
+		},
+	}, {
+		//  12: Split([0:0], (0:1]) {
+		//        return {
+		//            [0:0] -> [0]
+		//            (0:1] -> [1]
+		//        }
+		//     }
+		name: "12",
+		in:   []Span[rune]{sr("[0:0]"), sr("(0:1]")},
+		want: map[Bound[rune]][]int{
+			br("[0:0]"): {0},
+			br("(0:1]"): {1},
+		},
+	}, {
+		//  13: Split([0:1], (0:1]) {
+		//        return {
+		//            [0:0] -> [0]
+		//            (0:1] -> [0, 1]
+		//        }
+		//     }
+		name: "13",
+		in:   []Span[rune]{sr("[0:1]"), sr("(0:1]")},
+		want: map[Bound[rune]][]int{
+			br("[0:0]"): {0},
+			br("(0:1]"): {0, 1},
+		},
+	}, {
+		//  14: Split([0:2], (1:2]) {
+		//        return {
+		//            [0:1] -> [0]
+		//            (1:2] -> [0, 1]
+		//        }
+		//     }
+		name: "14",
+		in:   []Span[rune]{sr("[0:2]"), sr("(1:2]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1]"): {0},
+			br("(1:2]"): {0, 1},
+		},
+	}, {
+		//  15: Split([0:2], [1:2], (1:2]) {
+		//        return {
+		//            [0:1) -> [0]
+		//            [1:1] -> [0, 1]
+		//            (1:2] -> [0, 1, 2]
+		//        }
+		//     }
+		name: "15",
+		in:   []Span[rune]{sr("[0:2]"), sr("[1:2]"), sr("(1:2]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1)"): {0},
+			br("[1:1]"): {0, 1},
+			br("(1:2]"): {0, 1, 2},
+		},
+	}, {
+		//  16: Split([0:2], [1:1], (1:2]) {
+		//        return {
+		//            [0:1) -> [0]
+		//            [1:1] -> [0, 1]
+		//            (1:2] -> [0, 2]
+		//        }
+		//     }
+		name: "16",
+		in:   []Span[rune]{sr("[0:2]"), sr("[1:1]"), sr("(1:2]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1)"): {0},
+			br("[1:1]"): {0, 1},
+			br("(1:2]"): {0, 2},
+		},
+	}, {
+		//  17: Split([0:1), [0:2]) {
+		//        return {
+		//            [0:1) -> [0, 1]
+		//            [1:2] -> [1]
+		//        }
+		//     }
+		name: "17",
+		in:   []Span[rune]{sr("[0:1)"), sr("[0:2]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1)"): {0, 1},
+			br("[1:2]"): {1},
+		},
+	}, {
+		name: "18",
+		in:   []Span[rune]{sr("[0:2]"), sr("[0:1)"), sr("(1:2]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1)"): {0, 1},
+			br("[1:1]"): {0},
+			br("(1:2]"): {0, 2},
+		},
+	}, {
+		name: "19",
+		in:   []Span[rune]{sr("[0:1]"), sr("[0:1)"), sr("[0:2]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1)"): {0, 1, 2},
+			br("[1:1]"): {0, 2},
+			br("(1:2]"): {2},
+		},
+	}, {
+		name: "20",
+		in:   []Span[rune]{sr("[0:1)"), sr("[1:2]"), sr("(1:2]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1)"): {0},
+			br("[1:1]"): {1},
+			br("(1:2]"): {1, 2},
+		},
+	}, {
+		name: "21",
+		in:   []Span[rune]{sr("[0:1)"), sr("[1:2]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1)"): {0},
+			br("[1:2]"): {1},
+		},
+	}, {
+		name: "22",
+		in:   []Span[rune]{sr("[0:1)"), sr("[1:2]"), sr("[0:2]")},
+		want: map[Bound[rune]][]int{
+			br("[0:1)"): {0, 2},
+			br("[1:2]"): {1, 2},
+		},
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Split(tt.in, cmp.Compare[rune], NextInt[rune])
+
+			requireEqualMap(t, tt.want, got)
+		})
 	}
 }
 
@@ -160,8 +530,7 @@ func TestReverse(t *testing.T) {
 }
 
 func fold(r Span[rune]) Span[rune] {
-	rb := r.Bounds()
-	for _, b := range rb {
+	for _, b := range r.Bounds() {
 		lo, hi := folded(b.Lo.Value, b.Hi.Value)
 		r = r.UnionBound(NewBoundII(lo, hi))
 	}
@@ -184,6 +553,7 @@ func compareSpan[T comparable](want, got Span[T]) func(*testing.T) {
 
 func requireEqualSpan[T comparable](t *testing.T, want, got Span[T]) {
 	t.Helper()
+
 	if !IsEqual(want, got) {
 		t.Logf("Not equal: \n"+
 			"expected: %v\n"+
@@ -198,10 +568,68 @@ func compare[T comparable](want, got T) func(*testing.T) {
 
 func requireEqual[T comparable](t *testing.T, want, got T) {
 	t.Helper()
+
 	if want != got {
 		t.Logf("Not equal: \n"+
 			"expected: %v\n"+
 			"actual  : %v", want, got)
 		t.FailNow()
+	}
+}
+
+func requireEqualMap(t *testing.T, want, got map[Bound[rune]][]int) {
+	t.Helper()
+
+	if !maps.EqualFunc(want, got, slices.Equal[[]int]) {
+		kwant := slices.Collect(maps.Keys(want))
+		slices.SortFunc(kwant, cmpLoBound)
+		kgot := slices.Collect(maps.Keys(got))
+		slices.SortFunc(kgot, cmpLoBound)
+
+		if !slices.Equal(kwant, kgot) {
+			t.Logf("Not equal: \nExpected: %q\nActual:   %q", kwant, kgot)
+			t.FailNow()
+		}
+
+		log := "Not equal: \nExpected: "
+		for i, k := range kwant {
+			if i > 0 {
+				log += "          "
+			}
+			log += fmt.Sprintf("%q -> %v", k, want[k]) + "\n"
+		}
+
+		log += "\nActual:   "
+		for i, k := range kgot {
+			if i > 0 {
+				log += "          "
+			}
+			log += fmt.Sprintf("%q -> %v", k, got[k]) + "\n"
+		}
+
+		t.Log(log)
+		t.FailNow()
+	}
+}
+
+func cmpLoBound(a, b Bound[rune]) int {
+	ae := a.Lo
+	be := b.Lo
+	switch {
+	case ae.Value > be.Value:
+		return +1
+	case ae.Value < be.Value:
+		return -1
+
+	// a == b
+	case !ae.Included && be.Included: // (a, +Inf] > [a, +Inf]
+		return +1
+	case ae.Included && !be.Included: // [a, +Inf] < (a, +Inf]
+		return -1
+
+	// (a, +Inf] == (a, +Inf]
+	// [a, +Inf] == [a, +Inf]
+	default:
+		return 0
 	}
 }

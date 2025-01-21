@@ -103,7 +103,7 @@ func TestSetNonTS_Pop(t *testing.T) {
 	s.Add(2)
 	s.Add(3)
 
-	a, ok := Pop(s)
+	s, a, ok := Pop(s)
 	if !ok {
 		t.Error("Pop: expected to get value")
 	}
@@ -116,10 +116,10 @@ func TestSetNonTS_Pop(t *testing.T) {
 		t.Error("Pop: returned item should not exist")
 	}
 
-	Pop(s)
-	Pop(s)
+	s, _, _ = Pop(s)
+	s, _, _ = Pop(s)
 
-	if _, ok := Pop(s); ok {
+	if s, _, ok = Pop(s); ok {
 		t.Error("Pop: expected to not get value")
 	}
 }
@@ -227,18 +227,18 @@ func TestSetNonTS_Copy(t *testing.T) {
 	}
 }
 
-func TestSetNonTS_Difference(t *testing.T) {
+func TestSetNonTS_Subtract(t *testing.T) {
 	t.Parallel()
 
 	s := New("1", "2", "3")
 	r := New("3", "5")
-	s = Difference(s, r)
+	s = Subtract(s, r)
 
 	if s.Len() != 2 {
-		t.Error("Difference: the set doesn't have all items in it.")
+		t.Error("Subtract: the set doesn't have all items in it.")
 	}
 
 	if !s.Has("1") || !s.Has("2") {
-		t.Error("Difference: items after separation are not availabile in the set.")
+		t.Error("Subtract: items after separation are not availabile in the set.")
 	}
 }

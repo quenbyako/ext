@@ -14,11 +14,13 @@ import (
 	"testing"
 
 	"github.com/quenbyako/ext/slices"
-
 	. "github.com/quenbyako/ext/span"
 )
 
 type ttype = float64
+
+var next = math.Nextafter
+var cmpFunc = cmp.Compare[ttype]
 
 func bxi(lo, hi ttype) Bound[ttype] { return NewBoundXI(lo, hi) }
 func bix(lo, hi ttype) Bound[ttype] { return NewBoundIX(lo, hi) }
@@ -30,7 +32,7 @@ func sr(b ...string) Span[rune] {
 		bounds[i] = br(item)
 	}
 
-	return New(Next[rune], cmp.Compare[rune], bounds...)
+	return New(NextInt[rune], cmp.Compare[rune], bounds...)
 }
 
 func br(s string) Bound[rune] {
@@ -111,17 +113,19 @@ func TestUnion(t *testing.T) {
 	}{
 		{bf("(0:1]"), bf("[1:2)"), bf("(0:2)"), true},
 		{bf("(0:1)"), bf("[1:2)"), bf("(0:2)"), true},
-		{bf("[-1:0]"), bii(math.SmallestNonzeroFloat64, 1), bf("[-1:0]"), false},
+		{bf("[-1:0]"), bii(math.SmallestNonzeroFloat64, 1), bf("[-1:1]"), true},
+		// zero not included
+		{bf("[-1:0)"), bii(math.SmallestNonzeroFloat64, 1), bf("[-1:0)"), false},
 	} {
 		t.Run("", func(t *testing.T) {
-			got, gotOK := UnionBounds(nil, Compare[ttype], tt.a, tt.b)
+			got, gotOK := UnionBounds(math.Nextafter, Compare[ttype], tt.a, tt.b)
 			requireEqualBound(t, tt.want, got)
 			requireEqual(t, tt.wantOK, gotOK)
 		})
 	}
 }
 
-func TestDifference(t *testing.T) {
+func TestSubtract(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		a, b Bound[ttype]
@@ -147,7 +151,7 @@ func TestDifference(t *testing.T) {
 		{"#17", bf("[1:1]"), bf("[1:3]"), nil},
 		{"#18", bf("[1:1]"), bf("[1:1]"), nil},
 	} {
-		t.Run("", compareBounds(tt.want, tt.a.Difference(Compare[ttype], tt.b)))
+		t.Run("", compareBounds(tt.want, tt.a.Subtract(Compare[ttype], tt.b)))
 	}
 }
 
@@ -175,6 +179,45 @@ func TestOverlaps(t *testing.T) {
 					"actual  : %v", tt.want, got)
 				t.FailNow()
 			}
+		})
+	}
+}
+
+func TestBoundsIntersect(t *testing.T) {
+	for _, tt := range []struct {
+		a, b   Bound[ttype]
+		want   Bound[ttype]
+		wantOk bool
+	}{
+		// [- - - -a- - - -]
+		//         [- - - -b- - - -]
+		//         [- -c- -]
+		{bf("[1:5]"), bf("[2:9]"), bf("[2:5]"), true},
+		// [- - - -a- - - -]
+		//     [- -b- -]
+		//     [- -c- -]
+		{bf("[1:9]"), bf("[2:5]"), bf("[2:5]"), true},
+		//         [- - - -a- - - -]
+		// [- - - -b- - - -]
+		//         [- -c- -]
+		{bf("[2:9]"), bf("[1:5]"), bf("[2:5]"), true},
+		//         (- - - -a- - - -]
+		// [- - - -b- - - -)
+		//         (- -c- -)
+		{bf("(2:9]"), bf("[1:5)"), bf("(2:5)"), true},
+		//         [- -a- -]
+		// [- - - - - -b- - - - - -]
+		//         [- -c- -]
+		{bf("[2:5]"), bf("[1:9]"), bf("[2:5]"), true},
+		// [- -a- -)
+		// (- -b- -]
+		// (- -c- -)
+		{bf("[1:3)"), bf("(1:3]"), bf("(1:3)"), true},
+	} {
+		t.Run("", func(t *testing.T) {
+			got, gotOK := BoundsIntersect(tt.a, tt.b, cmpFunc)
+			requireEqual(t, tt.wantOk, gotOK)
+			requireEqual(t, tt.want, got)
 		})
 	}
 }

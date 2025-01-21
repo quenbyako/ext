@@ -36,7 +36,7 @@ func Uint32(min, max uint32) Fuzzer[uint32] {
 }
 
 func Uint64(min, max uint64) Fuzzer[uint64] {
-	if min == max {
+	if min == max || min+1 == max {
 		return Const(min)
 	}
 	if min > max {
