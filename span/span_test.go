@@ -530,10 +530,11 @@ func TestReverse(t *testing.T) {
 }
 
 func fold(r Span[rune]) Span[rune] {
-	for _, b := range r.Bounds() {
+	r.Bounds()(func(_ int, b Bound[rune]) bool {
 		lo, hi := folded(b.Lo.Value, b.Hi.Value)
 		r = r.UnionBound(NewBoundII(lo, hi))
-	}
+		return true
+	})
 
 	return r
 }

@@ -8,13 +8,11 @@ package span
 import (
 	"cmp"
 	"fmt"
-	"iter"
-	"maps"
 	"math"
 	"sort"
-	"strings"
 
 	"github.com/quenbyako/ext/itertools"
+	"github.com/quenbyako/ext/maps"
 	"github.com/quenbyako/ext/set"
 	"github.com/quenbyako/ext/slices"
 )
@@ -60,13 +58,15 @@ func IsEqual[T comparable](a, b Span[T]) bool {
 	}
 
 	aBounds, bBounds := a.Bounds(), b.Bounds()
-	for a, b := range itertools.Zip(itertools.Values(aBounds), itertools.Values(bBounds)) {
+	equal := true
+	itertools.Zip(itertools.Values(aBounds), itertools.Values(bBounds))(func(a, b Bound[T]) bool {
 		if a != b {
+			equal = false
 			return false
 		}
-	}
-
-	return true
+		return true
+	})
+	return equal
 }
 
 type Span[T any] interface {
@@ -84,7 +84,7 @@ type Span[T any] interface {
 
 	// Bounds returns a list of all bounds in a span. The bounds are ordered by
 	// their lower bound.
-	Bounds() iter.Seq2[int, Bound[T]]
+	Bounds() iterSeq2[int, Bound[T]]
 
 	Search(t T) (int, bool)
 }
@@ -247,7 +247,7 @@ func New[T any](next nextFunc[T], cmp func(T, T) int, bounds ...Bound[T]) Span[T
 	return s
 }
 
-func ToBasic[T any](s Span[T]) iter.Seq2[int, [2]Edge[T]] {
+func ToBasic[T any](s Span[T]) iterSeq2[int, [2]Edge[T]] {
 	return itertools.RemapPairs(s.Bounds(), func(i int, b Bound[T]) (int, [2]Edge[T]) { return i, [2]Edge[T]{b.Lo, b.Hi} })
 }
 
@@ -265,11 +265,11 @@ func FromBasicOrdered[T cmp.Ordered](s [][2]T) Span[T] {
 func MakeStrictBounds[T any](s Span[T], cmp cmpFunc[T], next nextFunc[T]) Span[T] {
 	newBounds := make([]Bound[T], 0)
 
-	for _, bound := range s.Bounds() {
+	s.Bounds()(func(_ int, bound Bound[T]) bool {
 		if bound.Lo.Included && bound.Hi.Included {
 			newBounds = append(newBounds, bound)
 
-			continue
+			return true
 		}
 
 		nlo, nhi := bound.Lo.Value, bound.Hi.Value
@@ -284,7 +284,7 @@ func MakeStrictBounds[T any](s Span[T], cmp cmpFunc[T], next nextFunc[T]) Span[T
 
 		// handling invalid bound
 		if cmp(nlo, nhi) > 0 {
-			continue
+			return true
 		}
 
 		newBounds = append(newBounds, NewBoundEdgesFunc(
@@ -292,16 +292,17 @@ func MakeStrictBounds[T any](s Span[T], cmp cmpFunc[T], next nextFunc[T]) Span[T
 			Edge[T]{Value: nhi, Included: true},
 			cmp,
 		))
-	}
+		return true
+	})
 
 	return New(next, cmp, newBounds...)
 }
 
-func EachItem[T any](s Span[T], next nextFunc[T], cmp cmpFunc[T]) iter.Seq[T] {
+func EachItem[T any](s Span[T], next nextFunc[T], cmp cmpFunc[T]) iterSeq[T] {
 	bounds := s.Bounds()
 
 	return func(yield func(T) bool) {
-		for _, b := range bounds {
+		bounds(func(_ int, b Bound[T]) bool {
 			r := b.Lo.Value
 			if !b.Lo.Included {
 				r = next(b.Lo.Value, b.Hi.Value)
@@ -310,7 +311,7 @@ func EachItem[T any](s Span[T], next nextFunc[T], cmp cmpFunc[T]) iter.Seq[T] {
 			if b.Hi.Included {
 				for {
 					if !yield(r) {
-						return
+						return false
 					}
 
 					if cmp(r, b.Hi.Value) >= 0 {
@@ -322,7 +323,7 @@ func EachItem[T any](s Span[T], next nextFunc[T], cmp cmpFunc[T]) iter.Seq[T] {
 			} else {
 				for {
 					if !yield(r) {
-						return
+						return false
 					}
 
 					r = next(r, b.Hi.Value)
@@ -332,20 +333,24 @@ func EachItem[T any](s Span[T], next nextFunc[T], cmp cmpFunc[T]) iter.Seq[T] {
 					}
 				}
 			}
-		}
+			return true
+		})
 	}
 }
 
-func (s span[T]) Bounds() iter.Seq2[int, Bound[T]] { return slices.All(s.bounds) }
+func (s span[T]) Bounds() iterSeq2[int, Bound[T]] { return slices.All(s.bounds) }
 
 func (s span[T]) Contains(y Span[T]) bool {
-	for _, b := range y.Bounds() {
+	contains := true
+	y.Bounds()(func(_ int, b Bound[T]) bool {
 		if !s.ContainsBound(b) {
+			contains = false
 			return false
 		}
-	}
+		return true
+	})
 
-	return true
+	return contains
 }
 
 func (s span[T]) ContainsBound(y Bound[T]) bool {
@@ -358,9 +363,10 @@ func (s span[T]) ContainsBound(y Bound[T]) bool {
 
 func (s span[T]) Union(y Span[T]) (z Span[T]) {
 	z = s
-	for _, b := range y.Bounds() {
+	y.Bounds()(func(_ int, b Bound[T]) bool {
 		z = z.UnionBound(b)
-	}
+		return true
+	})
 
 	return z
 }
@@ -396,9 +402,10 @@ func (s span[T]) UnionBound(bound Bound[T]) Span[T] {
 
 func (s span[T]) Subtract(y Span[T]) (z Span[T]) {
 	z = s
-	for _, b := range y.Bounds() {
+	y.Bounds()(func(_ int, b Bound[T]) bool {
 		z = z.SubtractBound(b)
-	}
+		return true
+	})
 
 	return z
 }
@@ -445,40 +452,6 @@ func (s span[T]) Format(f fmt.State, verb rune) {
 	}
 }
 
-func joinStringer[S ~[]T, T fmt.Stringer](s S, sep string) string {
-	return strings.Join(slices.Remap(s, func(s T) string { return s.String() }), sep)
-}
-
-type splitEdge[T any] struct {
-	value    T
-	included bool
-	owner    int
-	isStart  bool
-}
-
-func compareEdges[T any](a, b splitEdge[T], cmp cmpFunc[T]) int {
-	compared := cmp(a.value, b.value)
-	if compared != 0 {
-		return compared
-	}
-
-	// Сначала сравниваем Included
-	if a.included && !b.included {
-		return 1 // a (включенная) идет после b (невключенной)
-	} else if !a.included && b.included {
-		return -1 // a (невключенная) идет перед b (включенной)
-	}
-
-	// Если Included одинаковый, сравниваем IsStart
-	// TODO: bug?  maybe need to switch
-	if a.isStart && !b.isStart {
-		return -1 // a (начало) идет перед b (конец)
-	} else if !a.isStart && b.isStart {
-		return 1 // a (конец) идет после b (начало)
-	}
-
-	return 0 // Всё остальное одинаковое
-}
 
 // ........................   0    1    2
 // Example of sortedEdge [-Inf:0)[0:0](0:+Inf]
@@ -520,7 +493,7 @@ func Split[T comparable](spans []Span[T], cmp cmpFunc[T], next nextFunc[T]) (res
 		return map[Bound[T]][]int{}
 	}
 
-	edgeKeys := slices.Collect(maps.Keys(edges))
+	edgeKeys := maps.Keys(edges)
 	slices.SortFunc(edgeKeys, cmp)
 
 	res = make(map[Bound[T]][]int)
@@ -656,7 +629,7 @@ func collectEdges[T comparable](spans []Span[T]) map[T]sortedEdges {
 			continue
 		}
 
-		for _, b := range s.Bounds() {
+		s.Bounds()(func(_ int, b Bound[T]) bool {
 			if _, ok := edges[b.Lo.Value]; !ok {
 				edges[b.Lo.Value] = sortedEdges{}
 			}
@@ -684,7 +657,8 @@ func collectEdges[T comparable](spans []Span[T]) map[T]sortedEdges {
 			}
 
 			edges[b.Hi.Value] = hi
-		}
+			return true
+		})
 	}
 
 	return edges
