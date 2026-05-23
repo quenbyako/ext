@@ -9,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strconv"
-	"syscall"
 )
 
 // ErrDifferentOwnership says to user that they is not able to make action with
@@ -68,6 +66,7 @@ func HintErrPermission(err error, wantID string, wantAs FileMode) error {
 	}
 }
 
+//nolint:unused
 func chmodPrefix(wantAs FileMode) string {
 	switch wantAs {
 	case ModePermUser:
@@ -79,6 +78,7 @@ func chmodPrefix(wantAs FileMode) string {
 	}
 }
 
+//nolint:unused
 func (e ErrDifferentOwnership) chmod() (string, bool) {
 	var targetRWX FileMode
 	currentRWX := swapSelectedPerms(e.GotMode, e.WantAs)
@@ -120,6 +120,8 @@ func (e ErrDifferentOwnership) chmod() (string, bool) {
 }
 
 // as must be only ModeUser, ModeGroup or ModeOther
+//
+//nolint:unused
 func swapSelectedPerms(mode, as FileMode) FileMode {
 	switch as {
 	case ModePermUser:
@@ -131,6 +133,7 @@ func swapSelectedPerms(mode, as FileMode) FileMode {
 	}
 }
 
+//nolint:unused
 func permString(m FileMode) (s string) {
 	if m&ModePermRead > 0 {
 		s += "r"
@@ -181,8 +184,8 @@ func FileOwner(stat FileInfo) (uid, gid string, ok bool) { //cover:ignore // ali
 	// interface to get file ownership. So in [os.DirFS] implementation, it
 	// returns [os.File] type, and in unix, [os.File.Sys] response is always
 	// [os.fileStat].
-	if sys, ok := stat.Sys().(*syscall.Stat_t); ok {
-		return strconv.Itoa(int(sys.Uid)), strconv.Itoa(int(sys.Gid)), true
+	if uid, gid, ok := fileOwnerSys(stat); ok {
+		return uid, gid, true
 	}
 
 	// files without explicit permissions are always owned by root
